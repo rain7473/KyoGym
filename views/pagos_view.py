@@ -367,6 +367,7 @@ class PagosView(QWidget):
     """Vista de gestión de pagos"""
     def __init__(self):
         super().__init__()
+        self.mostrar_membresias = False
         self.init_ui()
         self.cargar_datos()
     
@@ -461,7 +462,15 @@ class PagosView(QWidget):
         for btn in [btn_todos, btn_mes, btn_mayor_10, btn_ultimos]:
             btn.setStyleSheet(estilo_botones)
             filtros_layout.addWidget(btn)
-        
+
+        # Botón toggle para mostrar/ocultar pagos de membresía
+        self.btn_mostrar_membresias = QPushButton("Mostrar membresías")
+        self.btn_mostrar_membresias.setCheckable(True)
+        self.btn_mostrar_membresias.setChecked(False)
+        self.btn_mostrar_membresias.setStyleSheet(estilo_botones)
+        self.btn_mostrar_membresias.clicked.connect(self._toggle_membresias)
+        filtros_layout.addWidget(self.btn_mostrar_membresias)
+
         filtros_layout.addStretch()
         
         # Total del mes
@@ -608,9 +617,20 @@ class PagosView(QWidget):
             return [p for p in pagos if texto in p.get('cliente_nombre', '').lower()]
         return pagos
 
+    def _filtrar_membresias(self, pagos):
+        """Filtra pagos de membresía según el toggle activo"""
+        if self.mostrar_membresias:
+            return pagos
+        return [p for p in pagos if p.get('concepto', '') != "Pago de membresía"]
+
+    def _toggle_membresias(self):
+        """Alterna la visibilidad de pagos de membresía"""
+        self.mostrar_membresias = self.btn_mostrar_membresias.isChecked()
+        self.cargar_datos()
+
     def cargar_datos(self, limite=100):
         """Carga los datos de pagos"""
-        pagos = self._filtrar_por_cliente(pago_service.listar_pagos(limite=limite))
+        pagos = self._filtrar_membresias(self._filtrar_por_cliente(pago_service.listar_pagos(limite=limite)))
         sorting_enabled = self.tabla.isSortingEnabled()
         self.tabla.setSortingEnabled(False)
 
@@ -663,9 +683,10 @@ class PagosView(QWidget):
             acciones_layout.setSpacing(6)
             acciones_layout.setAlignment(Qt.AlignCenter)
 
-            btn_editar = crear_boton_icono("edit.svg", "#7a8899", "#8a9aa9", "Editar")
-            btn_editar.clicked.connect(lambda checked, p=pago: self.editar_pago(p))
-            acciones_layout.addWidget(btn_editar)
+            if pago.get('concepto', '') != "Pago de membresía":
+                btn_editar = crear_boton_icono("edit.svg", "#7a8899", "#8a9aa9", "Editar")
+                btn_editar.clicked.connect(lambda checked, p=pago: self.editar_pago(p))
+                acciones_layout.addWidget(btn_editar)
 
             btn_eliminar = crear_boton_icono("delete.svg", "#e74c3c", "#c0392b", "Eliminar")
             btn_eliminar.clicked.connect(lambda checked, pid=pago['id']: self.eliminar_pago(pid))
@@ -677,7 +698,7 @@ class PagosView(QWidget):
     
     def cargar_pagos_mes(self):
         """Carga solo los pagos del mes actual"""
-        pagos = self._filtrar_por_cliente(pago_service.obtener_pagos_del_mes())
+        pagos = self._filtrar_membresias(self._filtrar_por_cliente(pago_service.obtener_pagos_del_mes()))
         sorting_enabled = self.tabla.isSortingEnabled()
         self.tabla.setSortingEnabled(False)
 
@@ -730,9 +751,10 @@ class PagosView(QWidget):
             acciones_layout.setSpacing(6)
             acciones_layout.setAlignment(Qt.AlignCenter)
 
-            btn_editar = crear_boton_icono("edit.svg", "#7a8899", "#8a9aa9", "Editar")
-            btn_editar.clicked.connect(lambda checked, p=pago: self.editar_pago(p))
-            acciones_layout.addWidget(btn_editar)
+            if pago.get('concepto', '') != "Pago de membresía":
+                btn_editar = crear_boton_icono("edit.svg", "#7a8899", "#8a9aa9", "Editar")
+                btn_editar.clicked.connect(lambda checked, p=pago: self.editar_pago(p))
+                acciones_layout.addWidget(btn_editar)
 
             btn_eliminar = crear_boton_icono("delete.svg", "#e74c3c", "#c0392b", "Eliminar")
             btn_eliminar.clicked.connect(lambda checked, pid=pago['id']: self.eliminar_pago(pid))
@@ -780,6 +802,7 @@ class PagosView(QWidget):
     
     def _poblar_tabla_pagos(self, pagos):
         """Llena la tabla con la lista de pagos proporcionada"""
+        pagos = self._filtrar_membresias(pagos)
         sorting_enabled = self.tabla.isSortingEnabled()
         self.tabla.setSortingEnabled(False)
         limpiar_tabla(self.tabla)
@@ -824,9 +847,10 @@ class PagosView(QWidget):
             acciones_layout.setSpacing(6)
             acciones_layout.setAlignment(Qt.AlignCenter)
 
-            btn_editar = crear_boton_icono("edit.svg", "#7a8899", "#8a9aa9", "Editar")
-            btn_editar.clicked.connect(lambda checked, p=pago: self.editar_pago(p))
-            acciones_layout.addWidget(btn_editar)
+            if pago.get('concepto', '') != "Pago de membresía":
+                btn_editar = crear_boton_icono("edit.svg", "#7a8899", "#8a9aa9", "Editar")
+                btn_editar.clicked.connect(lambda checked, p=pago: self.editar_pago(p))
+                acciones_layout.addWidget(btn_editar)
 
             btn_eliminar = crear_boton_icono("delete.svg", "#e74c3c", "#c0392b", "Eliminar")
             btn_eliminar.clicked.connect(lambda checked, pid=pago['id']: self.eliminar_pago(pid))

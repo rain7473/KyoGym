@@ -171,6 +171,15 @@ class OneDriveSyncPersonal:
         data['inventario'] = [dict(row) for row in cursor.fetchall()]
         print(f"  ✓ Inventario: {len(data['inventario'])} registros")
         
+        # Leer egresos
+        try:
+            cursor.execute("SELECT * FROM egresos ORDER BY id")
+            data['egresos'] = [dict(row) for row in cursor.fetchall()]
+            print(f"  ✓ Egresos: {len(data['egresos'])} registros")
+        except Exception:
+            data['egresos'] = []
+            print("  ! Tabla egresos no encontrada (se omite)")
+        
         conn.close()
         return data
     
@@ -274,6 +283,24 @@ class OneDriveSyncPersonal:
             for col in range(1, len(headers) + 1):
                 ws_inventario.column_dimensions[get_column_letter(col)].width = 15
         
+        # Hoja 6: Egresos
+        ws_egresos = wb.create_sheet("Egresos")
+        
+        if data.get('egresos'):
+            headers = list(data['egresos'][0].keys())
+            for col, header in enumerate(headers, 1):
+                cell = ws_egresos.cell(1, col, header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+            
+            for row_idx, egreso in enumerate(data['egresos'], 2):
+                for col_idx, header in enumerate(headers, 1):
+                    ws_egresos.cell(row_idx, col_idx, egreso[header])
+            
+            for col in range(1, len(headers) + 1):
+                ws_egresos.column_dimensions[get_column_letter(col)].width = 15
+        
         wb.save(output_path)
         print(f"✅ Archivo Excel creado")
         
@@ -340,23 +367,43 @@ class OneDriveSyncPersonal:
         import string
         for letter in string.ascii_uppercase:
             drive = Path(f"{letter}:\\")
-            if drive.exists():
+            try:
+                if not drive.exists():
+                    continue
+            except OSError:
+                continue
+            try:
                 # Primero buscar subcarpeta (en inglés o español)
                 for sub in ["Mi unidad", "My Drive", "Google Drive"]:
                     p = drive / sub
-                    if p.exists():
-                        return p
+                    try:
+                        if p.exists():
+                            return p
+                    except OSError:
+                        continue
                 # Si la raíz tiene el marcador de Google Drive
                 marker = drive / ".shortcut-targets-by-id"
-                if marker.exists():
-                    # Crear "My Drive" si no existe
-                    my_drive = drive / "My Drive"
-                    my_drive.mkdir(exist_ok=True)
-                    return my_drive
+                try:
+                    if marker.exists():
+                        # Crear "My Drive" si no existe
+                        my_drive = drive / "My Drive"
+                        try:
+                            my_drive.mkdir(exist_ok=True)
+                        except OSError:
+                            pass
+                        if my_drive.exists():
+                            return my_drive
+                except OSError:
+                    pass
+            except OSError:
+                continue
 
         for p in candidates:
-            if p.exists():
-                return p
+            try:
+                if p.exists():
+                    return p
+            except OSError:
+                continue
         return None
 
     def sync(self):

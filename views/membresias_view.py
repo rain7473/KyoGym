@@ -669,10 +669,6 @@ class MembresiasView(QWidget):
             acciones_layout.setSpacing(6)
             acciones_layout.setAlignment(Qt.AlignCenter)
 
-            btn_editar = crear_boton_icono("edit.svg", "#7a8899", "#8a9aa9", "Editar")
-            btn_editar.clicked.connect(lambda checked, m=membresia: self.editar_membresia(m))
-            acciones_layout.addWidget(btn_editar)
-
             btn_eliminar = crear_boton_icono("delete.svg", "#e74c3c", "#c0392b", "Eliminar")
             btn_eliminar.clicked.connect(lambda checked, mid=membresia['id']: self.eliminar_membresia(mid))
             acciones_layout.addWidget(btn_eliminar)

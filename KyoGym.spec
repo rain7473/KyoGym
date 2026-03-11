@@ -5,8 +5,8 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[('assets', 'assets')],
+    hiddenimports=['PySide6.QtCharts', 'PySide6.QtSvg', 'PySide6.QtSvgWidgets', 'reportlab', 'openpyxl'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -35,4 +35,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='assets/logo.ico',
 )

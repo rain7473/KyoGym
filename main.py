@@ -22,6 +22,7 @@ from views.membresias_view import MembresiasView
 from views.clientes_view import ClientesView
 from views.pagos_view import PagosView
 from views.inventario_view import InventarioView
+from views.finanzas_view import FinanzasView
 from views.configuracion_view import ConfiguracionView
 
 
@@ -106,6 +107,8 @@ class MainWindow(QMainWindow):
             self.pagos_view = PagosView()
             print("Creando inventario...")
             self.inventario_view = InventarioView()
+            print("Creando finanzas...")
+            self.finanzas_view = FinanzasView()
             print("Creando configuración...")
             self.configuracion_view = ConfiguracionView()
             self.configuracion_view.logout_solicitado.connect(self.manejar_logout)
@@ -114,6 +117,7 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(self.clientes_view)
             self.stack.addWidget(self.pagos_view)
             self.stack.addWidget(self.inventario_view)
+            self.stack.addWidget(self.finanzas_view)
             self.stack.addWidget(self.configuracion_view)
             
             main_layout.addWidget(self.stack)
@@ -179,18 +183,21 @@ class MainWindow(QMainWindow):
         self.btn_clientes = SidebarButton("👤 Clientes")
         self.btn_pagos = SidebarButton("💰 Pagos")
         self.btn_inventario = SidebarButton("📦 Inventario")
+        self.btn_finanzas = SidebarButton("💰 Finanzas")
         
         self.btn_inicio.clicked.connect(lambda: self.cambiar_vista(0, self.btn_inicio))
         self.btn_membresias.clicked.connect(lambda: self.cambiar_vista(1, self.btn_membresias))
         self.btn_clientes.clicked.connect(lambda: self.cambiar_vista(2, self.btn_clientes))
         self.btn_pagos.clicked.connect(lambda: self.cambiar_vista(3, self.btn_pagos))
         self.btn_inventario.clicked.connect(lambda: self.cambiar_vista(4, self.btn_inventario))
+        self.btn_finanzas.clicked.connect(lambda: self.cambiar_vista(5, self.btn_finanzas))
         
         layout.addWidget(self.btn_inicio)
         layout.addWidget(self.btn_membresias)
         layout.addWidget(self.btn_clientes)
         layout.addWidget(self.btn_pagos)
         layout.addWidget(self.btn_inventario)
+        layout.addWidget(self.btn_finanzas)
         
         # Espacio flexible
         layout.addStretch()
@@ -213,7 +220,7 @@ class MainWindow(QMainWindow):
         
         # Botón de configuración al final
         self.btn_configuracion = SidebarButton("⚙️ Configuración")
-        self.btn_configuracion.clicked.connect(lambda: self.cambiar_vista(5, self.btn_configuracion))
+        self.btn_configuracion.clicked.connect(lambda: self.cambiar_vista(6, self.btn_configuracion))
         layout.addWidget(self.btn_configuracion)
         
         return sidebar
@@ -263,6 +270,7 @@ class MainWindow(QMainWindow):
         """Muestra u oculta secciones según el rol del usuario activo."""
         es_privilegiado = self.rol_usuario == 'admin' or self.usuario_activo == 'prueba'
         self.btn_inicio.setVisible(es_privilegiado)
+        self.btn_finanzas.setVisible(es_privilegiado)
         if hasattr(self, 'configuracion_view'):
             self.configuracion_view.set_usuario(self.usuario_activo, self.rol_usuario)
 
@@ -291,6 +299,7 @@ class MainWindow(QMainWindow):
         self.btn_clientes.setChecked(False)
         self.btn_pagos.setChecked(False)
         self.btn_inventario.setChecked(False)
+        self.btn_finanzas.setChecked(False)
         self.btn_configuracion.setChecked(False)
         
         # Marcar el botón actual
@@ -311,6 +320,8 @@ class MainWindow(QMainWindow):
             self.pagos_view.actualizar_total_mes()
         elif indice == 4:
             self.inventario_view.cargar_datos()
+        elif indice == 5:
+            self.finanzas_view.cargar_datos()
 
 
 def main():

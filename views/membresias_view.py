@@ -2,8 +2,8 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                                QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
                                QDialog, QFormLayout, QLineEdit, QDateEdit, QComboBox,
-                               QMessageBox, QDialogButtonBox)
-from PySide6.QtCore import Qt, QDate
+                               QMessageBox, QDialogButtonBox, QCompleter, QApplication)
+from PySide6.QtCore import Qt, QDate, QObject, QEvent
 from PySide6.QtGui import QFont, QColor
 from datetime import date
 from pathlib import Path
@@ -129,7 +129,44 @@ class AgregarMembresiaDialog(QDialog):
         self.combo_cliente.lineEdit().setPlaceholderText("Escribe para buscar...")
         self.combo_cliente.lineEdit().setClearButtonEnabled(True)
         self.cargar_clientes()
-        layout.addRow("Cliente:", self.combo_cliente)
+
+        # Fila de cliente con botón agregar y check de estado
+        _cliente_row = QWidget()
+        _cliente_hbox = QHBoxLayout(_cliente_row)
+        _cliente_hbox.setContentsMargins(0, 0, 0, 0)
+        _cliente_hbox.setSpacing(4)
+        _cliente_hbox.addWidget(self.combo_cliente, 1)
+
+        self.btn_agregar_cliente = QPushButton("+")
+        self.btn_agregar_cliente.setFixedSize(32, 32)
+        self.btn_agregar_cliente.setToolTip("Agregar nuevo cliente")
+        self.btn_agregar_cliente.setVisible(False)
+        self.btn_agregar_cliente.setCursor(Qt.PointingHandCursor)
+        self.btn_agregar_cliente.setStyleSheet("""
+            QPushButton {
+                background-color: #2c6fad;
+                color: white;
+                border: none;
+                border-radius: 16px;
+                font-size: 18px;
+                font-weight: bold;
+                padding: 0px;
+                min-width: 0px;
+            }
+            QPushButton:hover { background-color: #255d91; }
+        """)
+        self.btn_agregar_cliente.clicked.connect(self._agregar_cliente_rapido)
+        _cliente_hbox.addWidget(self.btn_agregar_cliente)
+
+        self.lbl_cliente_ok = QLabel("✔")
+        self.lbl_cliente_ok.setFixedSize(32, 32)
+        self.lbl_cliente_ok.setAlignment(Qt.AlignCenter)
+        self.lbl_cliente_ok.setStyleSheet("color: #27ae60; font-size: 18px; font-weight: bold;")
+        self.lbl_cliente_ok.setVisible(False)
+        _cliente_hbox.addWidget(self.lbl_cliente_ok)
+
+        layout.addRow("Cliente:", _cliente_row)
+        self.combo_cliente.lineEdit().textChanged.connect(self._verificar_cliente_estado)
         
         # Fecha de inicio
         self.fecha_inicio = QDateEdit()
@@ -178,37 +215,108 @@ class AgregarMembresiaDialog(QDialog):
     
     def cargar_clientes(self):
         """Carga la lista de clientes con búsqueda en tiempo real"""
-        from PySide6.QtWidgets import QCompleter
-        from PySide6.QtCore import Qt
-
         clientes = cliente_service.listar_clientes()
         self.combo_cliente.clear()
-        self.combo_cliente.addItem("", None)  # opción vacía inicial
+        self.combo_cliente.addItem("", None)
 
         nombres = []
         for cliente in clientes:
             self.combo_cliente.addItem(cliente['nombre'], cliente['id'])
             nombres.append(cliente['nombre'])
 
-        # Autocompletar con búsqueda por contenido
+        # Popup que filtra por contenido (MatchContains)
         completer = QCompleter(nombres)
         completer.setCaseSensitivity(Qt.CaseInsensitive)
         completer.setFilterMode(Qt.MatchContains)
         completer.setCompletionMode(QCompleter.PopupCompletion)
         self.combo_cliente.setCompleter(completer)
 
-        # Sincronizar selección al elegir desde el completador
+        combo = self.combo_cliente
+        line_edit = combo.lineEdit()
+
+        # Sincronizar selección al elegir desde el popup (clic o Enter)
         def _on_activated(text):
-            idx = self.combo_cliente.findText(text)
+            idx = combo.findText(text)
             if idx >= 0:
-                self.combo_cliente.setCurrentIndex(idx)
+                combo.blockSignals(True)
+                combo.setCurrentIndex(idx)
+                combo.blockSignals(False)
+            line_edit.deselect()
+            line_edit.setCursorPosition(len(line_edit.text()))
 
         completer.activated.connect(_on_activated)
 
-        # Dejar el campo vacío al abrir
+        # Tab: acepta el primer item del popup (o el resaltado con ↑↓)
+        # Se instala a nivel de app para que Qt no intercepte Tab antes.
+        class _TabFilter(QObject):
+            def eventFilter(self_, obj, event):
+                if (
+                    event.type() == QEvent.Type.KeyPress
+                    and event.key() == Qt.Key_Tab
+                    and obj is line_edit
+                ):
+                    popup = completer.popup()
+                    if popup and popup.isVisible():
+                        model = popup.model()
+                        cur = popup.currentIndex()
+                        if not cur.isValid() and model.rowCount() > 0:
+                            cur = model.index(0, 0)
+                        if cur.isValid():
+                            text = model.data(cur)
+                            _on_activated(text)
+                            popup.hide()
+                            return True
+                return False
+
+        self._tab_filter_clientes = _TabFilter(self)
+        QApplication.instance().installEventFilter(self._tab_filter_clientes)
+        self.finished.connect(
+            lambda: QApplication.instance().removeEventFilter(self._tab_filter_clientes)
+        )
+
+        # Strip espacios al salir del campo
+        line_edit.editingFinished.connect(
+            lambda: line_edit.setText(line_edit.text().strip())
+        )
+
         self.combo_cliente.setCurrentIndex(0)
-        self.combo_cliente.lineEdit().clear()
+        line_edit.clear()
     
+    def _verificar_cliente_estado(self, text):
+        """Muestra botón + o check verde según si el cliente existe en la lista"""
+        text = text.strip()
+        if not text:
+            self.btn_agregar_cliente.setVisible(False)
+            self.lbl_cliente_ok.setVisible(False)
+            return
+        idx = self.combo_cliente.findText(text, Qt.MatchExactly)
+        cliente_id = self.combo_cliente.itemData(idx) if idx >= 0 else None
+        if cliente_id:
+            self.btn_agregar_cliente.setVisible(False)
+            self.lbl_cliente_ok.setVisible(True)
+        else:
+            self.btn_agregar_cliente.setVisible(True)
+            self.lbl_cliente_ok.setVisible(False)
+
+    def _agregar_cliente_rapido(self):
+        """Abre el diálogo de nuevo cliente con el nombre prellenado"""
+        from views.clientes_view import AgregarClienteDialog
+        nombre_sugerido = self.combo_cliente.lineEdit().text().strip()
+        dialog = AgregarClienteDialog(self)
+        if nombre_sugerido:
+            dialog.nombre.setText(nombre_sugerido)
+        if dialog.exec() == QDialog.Accepted:
+            datos = dialog.obtener_datos()
+            nuevo_id = cliente_service.crear_cliente(
+                datos['nombre'], datos.get('telefono', ''),
+                datos.get('sexo', ''), datos.get('fecha_nacimiento'),
+                datos.get('email', '')
+            )
+            self.cargar_clientes()
+            idx = self.combo_cliente.findData(nuevo_id)
+            if idx >= 0:
+                self.combo_cliente.setCurrentIndex(idx)
+
     def cargar_datos_membresia(self):
         """Carga los datos de la membresía a editar"""
         if not self.membresia:

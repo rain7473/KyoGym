@@ -1,9 +1,10 @@
 """Vista de gestión de pagos"""
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
                                QDialog, QFormLayout, QLineEdit, QDateEdit, QComboBox,
-                               QMessageBox, QDialogButtonBox, QCompleter)
-from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel
+                               QMessageBox, QDialogButtonBox, QCompleter, QSpinBox,
+                               QApplication)
+from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel, QObject, QEvent
 from PySide6.QtGui import QFont, QColor
 from datetime import date
 from services import pago_service, cliente_service, membresia_service
@@ -41,7 +42,7 @@ class RegistrarPagoDialog(QDialog):
                 color: #2c2c2c;
                 font-size: 13px;
             }
-            QLineEdit, QComboBox, QDateEdit {
+            QLineEdit, QComboBox, QDateEdit, QSpinBox {
                 padding: 8px;
                 border: 2px solid #d0d0d0;
                 border-radius: 4px;
@@ -49,8 +50,27 @@ class RegistrarPagoDialog(QDialog):
                 color: #1a1a1a;
                 font-size: 13px;
             }
-            QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
+            QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus {
                 border: 2px solid #c0c0c0;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                width: 20px;
+                border: none;
+                background-color: #e0e0e0;
+            }
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #c8c8c8;
+            }
+            QSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;
+                border-bottom: 1px solid #d0d0d0;
+                border-top-right-radius: 2px;
+            }
+            QSpinBox::down-button {
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;
+                border-bottom-right-radius: 2px;
             }
             QComboBox QAbstractItemView {
                 color: #2c2c2c;
@@ -130,7 +150,44 @@ class RegistrarPagoDialog(QDialog):
         self.combo_cliente.lineEdit().setPlaceholderText("Escribe para buscar...")
         self.combo_cliente.lineEdit().setClearButtonEnabled(True)
         self.cargar_clientes()
-        layout.addRow("Cliente:", self.combo_cliente)
+
+        # Fila de cliente con botón agregar y check de estado
+        _cliente_row = QWidget()
+        _cliente_hbox = QHBoxLayout(_cliente_row)
+        _cliente_hbox.setContentsMargins(0, 0, 0, 0)
+        _cliente_hbox.setSpacing(4)
+        _cliente_hbox.addWidget(self.combo_cliente, 1)
+
+        self.btn_agregar_cliente = QPushButton("+")
+        self.btn_agregar_cliente.setFixedSize(32, 32)
+        self.btn_agregar_cliente.setToolTip("Agregar nuevo cliente")
+        self.btn_agregar_cliente.setVisible(False)
+        self.btn_agregar_cliente.setCursor(Qt.PointingHandCursor)
+        self.btn_agregar_cliente.setStyleSheet("""
+            QPushButton {
+                background-color: #2c6fad;
+                color: white;
+                border: none;
+                border-radius: 16px;
+                font-size: 18px;
+                font-weight: bold;
+                padding: 0px;
+                min-width: 0px;
+            }
+            QPushButton:hover { background-color: #255d91; }
+        """)
+        self.btn_agregar_cliente.clicked.connect(self._agregar_cliente_rapido)
+        _cliente_hbox.addWidget(self.btn_agregar_cliente)
+
+        self.lbl_cliente_ok = QLabel("✔")
+        self.lbl_cliente_ok.setFixedSize(32, 32)
+        self.lbl_cliente_ok.setAlignment(Qt.AlignCenter)
+        self.lbl_cliente_ok.setStyleSheet("color: #27ae60; font-size: 18px; font-weight: bold;")
+        self.lbl_cliente_ok.setVisible(False)
+        _cliente_hbox.addWidget(self.lbl_cliente_ok)
+
+        layout.addRow("Cliente:", _cliente_row)
+        self.combo_cliente.lineEdit().textChanged.connect(self._verificar_cliente_estado)
         
         # Fecha
         self.fecha = QDateEdit()
@@ -160,20 +217,29 @@ class RegistrarPagoDialog(QDialog):
         self.combo_producto.setVisible(False)
         layout.addRow("Producto:", self.combo_producto)
 
-        # Campo cantidad (oculto por defecto)
-        self.input_cantidad = QLineEdit()
-        self.input_cantidad.setPlaceholderText("Cantidad")
-        self.input_cantidad.setValidator(crear_validador_entero())
-        self.input_cantidad.setVisible(False)
-        layout.addRow("Cantidad:", self.input_cantidad)
+        # Campo cantidad con flechas (oculto por defecto)
+        self.spin_cantidad = QSpinBox()
+        self.spin_cantidad.setMinimum(1)
+        self.spin_cantidad.setMaximum(999)
+        self.spin_cantidad.setValue(1)
+        self.spin_cantidad.setVisible(False)
+        layout.addRow("Cantidad:", self.spin_cantidad)
 
         # Cargar productos
         self.cargar_productos()
 
-        # Detectar cambio de concepto
+        # Detectar cambio de concepto, producto y cantidad
         self.concepto.currentTextChanged.connect(self.toggle_producto_fields)
+        self.combo_producto.currentIndexChanged.connect(
+            lambda _: self._actualizar_monto_producto()
+        )
+        self.spin_cantidad.valueChanged.connect(
+            lambda _: self._actualizar_monto_producto()
+        )
 
-        
+        # Establecer monto inicial según concepto por defecto
+        self.toggle_producto_fields(self.concepto.currentText())
+
         # Botones
         botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         botones.accepted.connect(self.aceptar)
@@ -186,108 +252,216 @@ class RegistrarPagoDialog(QDialog):
         """Carga la lista de clientes con búsqueda en tiempo real"""
         clientes = cliente_service.listar_clientes()
         self.combo_cliente.clear()
-        self.combo_cliente.addItem("", None)  # opción vacía inicial
+        self.combo_cliente.addItem("", None)
 
         nombres = []
         for cliente in clientes:
             self.combo_cliente.addItem(cliente['nombre'], cliente['id'])
             nombres.append(cliente['nombre'])
 
-        # Autocompletar con búsqueda por contenido
+        # Popup que filtra por contenido (MatchContains)
         completer = QCompleter(nombres)
         completer.setCaseSensitivity(Qt.CaseInsensitive)
         completer.setFilterMode(Qt.MatchContains)
         completer.setCompletionMode(QCompleter.PopupCompletion)
         self.combo_cliente.setCompleter(completer)
 
-        # Sincronizar selección al elegir desde el completador
+        combo = self.combo_cliente
+        line_edit = combo.lineEdit()
+
+        # Sincronizar selección al elegir desde el popup (clic o Enter)
         def _on_activated(text):
-            idx = self.combo_cliente.findText(text)
+            idx = combo.findText(text)
             if idx >= 0:
-                self.combo_cliente.setCurrentIndex(idx)
+                combo.blockSignals(True)
+                combo.setCurrentIndex(idx)
+                combo.blockSignals(False)
+            line_edit.deselect()
+            line_edit.setCursorPosition(len(line_edit.text()))
 
         completer.activated.connect(_on_activated)
 
-        # Dejar el campo vacío al abrir
+        # Tab: acepta el primer item del popup (o el resaltado con ↑↓)
+        # Se instala a nivel de app para que Qt no intercepte Tab antes.
+        class _TabFilter(QObject):
+            def eventFilter(self_, obj, event):
+                if (
+                    event.type() == QEvent.Type.KeyPress
+                    and event.key() == Qt.Key_Tab
+                    and obj is line_edit
+                ):
+                    popup = completer.popup()
+                    if popup and popup.isVisible():
+                        model = popup.model()
+                        cur = popup.currentIndex()
+                        if not cur.isValid() and model.rowCount() > 0:
+                            cur = model.index(0, 0)
+                        if cur.isValid():
+                            text = model.data(cur)
+                            _on_activated(text)
+                            popup.hide()
+                            return True
+                return False
+
+        self._tab_filter_clientes = _TabFilter(self)
+        QApplication.instance().installEventFilter(self._tab_filter_clientes)
+        self.finished.connect(
+            lambda: QApplication.instance().removeEventFilter(self._tab_filter_clientes)
+        )
+
+        # Strip espacios al salir del campo
+        line_edit.editingFinished.connect(
+            lambda: line_edit.setText(line_edit.text().strip())
+        )
+
         self.combo_cliente.setCurrentIndex(0)
-        self.combo_cliente.lineEdit().clear()
+        line_edit.clear()
 
     def cargar_productos(self):
-        """Carga productos en el combo"""
+        """Carga productos en el combo almacenando el precio unitario"""
         productos = inventario_service.listar_productos()
         self.combo_producto.clear()
 
-        for producto in productos:
+        for i, producto in enumerate(productos):
             self.combo_producto.addItem(producto['nombre'], producto['id'])
+            self.combo_producto.setItemData(i, float(producto.get('precio', 0.0)), Qt.UserRole + 1)
 
     def toggle_producto_fields(self, texto):
-        """Muestra u oculta campos según concepto"""
+        """Muestra u oculta campos según concepto y rellena monto automáticamente"""
         es_producto = texto == "Producto"
         self.combo_producto.setVisible(es_producto)
-        self.input_cantidad.setVisible(es_producto)
-    
+        self.spin_cantidad.setVisible(es_producto)
+        if getattr(self, '_cargando', False):
+            return
+        if texto == "Pago de día":
+            self.monto.setText("2.00")
+        elif texto == "Producto":
+            self._actualizar_monto_producto()
+
+    def _get_precio_producto_actual(self):
+        """Devuelve el precio unitario del producto seleccionado"""
+        idx = self.combo_producto.currentIndex()
+        precio = self.combo_producto.itemData(idx, Qt.UserRole + 1)
+        try:
+            return float(precio) if precio is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _actualizar_monto_producto(self):
+        """Actualiza el monto según precio × cantidad del producto seleccionado"""
+        if getattr(self, '_cargando', False):
+            return
+        precio = self._get_precio_producto_actual()
+        cantidad = self.spin_cantidad.value()
+        self.monto.setText(f"{precio * cantidad:.2f}")
+
+    def _verificar_cliente_estado(self, text):
+        """Muestra botón + o check verde según si el cliente existe en la lista"""
+        text = text.strip()
+        if not text:
+            self.btn_agregar_cliente.setVisible(False)
+            self.lbl_cliente_ok.setVisible(False)
+            return
+        idx = self.combo_cliente.findText(text, Qt.MatchExactly)
+        cliente_id = self.combo_cliente.itemData(idx) if idx >= 0 else None
+        if cliente_id:
+            self.btn_agregar_cliente.setVisible(False)
+            self.lbl_cliente_ok.setVisible(True)
+        else:
+            self.btn_agregar_cliente.setVisible(True)
+            self.lbl_cliente_ok.setVisible(False)
+
+    def _agregar_cliente_rapido(self):
+        """Abre el diálogo de nuevo cliente con el nombre prellenado"""
+        from views.clientes_view import AgregarClienteDialog
+        nombre_sugerido = self.combo_cliente.lineEdit().text().strip()
+        dialog = AgregarClienteDialog(self)
+        if nombre_sugerido:
+            dialog.nombre.setText(nombre_sugerido)
+        if dialog.exec() == QDialog.Accepted:
+            datos = dialog.obtener_datos()
+            nuevo_id = cliente_service.crear_cliente(
+                datos['nombre'], datos.get('telefono', ''),
+                datos.get('sexo', ''), datos.get('fecha_nacimiento'),
+                datos.get('email', '')
+            )
+            self.cargar_clientes()
+            idx = self.combo_cliente.findData(nuevo_id)
+            if idx >= 0:
+                self.combo_cliente.setCurrentIndex(idx)
+
     def cargar_datos_pago(self):
         """Carga los datos del pago a editar"""
         if not self.pago:
             return
-        
-        # Seleccionar cliente
-        for i in range(self.combo_cliente.count()):
-            if self.combo_cliente.itemData(i) == self.pago['cliente_id']:
-                self.combo_cliente.setCurrentIndex(i)
-                break
-        
-        # Fecha
-        fecha_parts = self.pago['fecha'].split('-')
-        self.fecha.setDate(QDate(int(fecha_parts[0]), int(fecha_parts[1]), int(fecha_parts[2])))
-        
-        # Monto
-        self.monto.setText(str(self.pago['monto']))
-        
-        # Método
-        metodo = self.pago.get('metodo_pago', 'Efectivo')
-        index = self.metodo.findText(metodo)
-        if index >= 0:
-            self.metodo.setCurrentIndex(index)
-        
-        # Concepto
-        concepto_guardado = self.pago.get('concepto', '')
-        index = self.concepto.findText(concepto_guardado)
-        if index >= 0:
-            self.concepto.setCurrentIndex(index)
-        else:
-            # Es un nombre de producto directamente almacenado
-            self.concepto.setCurrentText('Producto')
+
+        self._cargando = True
+        try:
+            # Seleccionar cliente
+            for i in range(self.combo_cliente.count()):
+                if self.combo_cliente.itemData(i) == self.pago['cliente_id']:
+                    self.combo_cliente.setCurrentIndex(i)
+                    break
+
+            # Fecha
+            fecha_parts = self.pago['fecha'].split('-')
+            self.fecha.setDate(QDate(int(fecha_parts[0]), int(fecha_parts[1]), int(fecha_parts[2])))
+
+            # Método
+            metodo = self.pago.get('metodo_pago', 'Efectivo')
+            index = self.metodo.findText(metodo)
+            if index >= 0:
+                self.metodo.setCurrentIndex(index)
+
+            # Concepto
+            concepto_guardado = self.pago.get('concepto', '')
+            index = self.concepto.findText(concepto_guardado)
+            if index >= 0:
+                self.concepto.setCurrentIndex(index)
+                es_producto = False
+            else:
+                # Es un nombre de producto directamente almacenado
+                self.concepto.setCurrentText('Producto')
+                es_producto = True
+
+            # Si es producto: seleccionar el producto y la cantidad
+            if es_producto:
+                concepto_nombre = self.pago.get('concepto', '')
+                for i in range(self.combo_producto.count()):
+                    if self.combo_producto.itemText(i) == concepto_nombre:
+                        self.combo_producto.setCurrentIndex(i)
+                        break
+                try:
+                    cantidad = int(self.pago.get('cantidad', 1) or 1)
+                except (TypeError, ValueError):
+                    cantidad = 1
+                self.spin_cantidad.setValue(max(1, cantidad))
+
+            # Monto siempre al final para no ser sobreescrito
+            self.monto.setText(str(self.pago['monto']))
+        finally:
+            self._cargando = False
     
     def aceptar(self):
         """Valida y acepta el diálogo"""
-        if self.combo_cliente.currentData() is None:
+        MSG_STYLE = """
+            QMessageBox { background-color: #ffffff; }
+            QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }
+            QPushButton {
+                background-color: #2c3e50; color: white;
+                padding: 8px 20px; border: none; border-radius: 4px;
+                font-weight: bold; font-size: 13px; min-width: 80px;
+            }
+            QPushButton:hover { background-color: #3d5166; }
+        """
+        texto_campo = self.combo_cliente.lineEdit().text().strip()
+        idx = self.combo_cliente.findText(texto_campo, Qt.MatchExactly)
+        cliente_id = self.combo_cliente.itemData(idx) if idx >= 0 else None
+        if not cliente_id:
             msg = QMessageBox(self)
             msg.setWindowTitle("Error")
-            msg.setText("Seleccione un cliente")
-            msg.setStyleSheet("""
-                QMessageBox {
-                    background-color: #ffffff;
-                }
-                QLabel {
-                    color: #2c2c2c;
-                    font-size: 13px;
-                    min-width: 300px;
-                }
-                QPushButton {
-                    background-color: #2c3e50;
-                    color: white;
-                    padding: 8px 20px;
-                    border: none;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 13px;
-                    min-width: 80px;
-                }
-                QPushButton:hover {
-                    background-color: #3d5166;
-                }
-            """)
+            msg.setText("Seleccione un cliente de la lista")
+            msg.setStyleSheet(MSG_STYLE)
             msg.exec()
             return
         
@@ -333,7 +507,9 @@ class RegistrarPagoDialog(QDialog):
     def obtener_datos(self):
         """Retorna los datos ingresados"""
         fecha = self.fecha.date()
-        cliente_id = self.combo_cliente.currentData()
+        texto_campo = self.combo_cliente.lineEdit().text().strip()
+        idx = self.combo_cliente.findText(texto_campo, Qt.MatchExactly)
+        cliente_id = self.combo_cliente.itemData(idx) if idx >= 0 else None
         concepto_texto = self.concepto.currentText()
         monto_texto = self.monto.text().strip()
 
@@ -348,14 +524,7 @@ class RegistrarPagoDialog(QDialog):
         if concepto_texto == "Producto":
             producto_id = self.combo_producto.currentData()
             nombre_producto = self.combo_producto.currentText()
-            try:
-                cantidad = int(self.input_cantidad.text())
-                if cantidad <= 0:
-                    raise ValueError()
-            except:
-                QMessageBox.warning(self, "Error", "Cantidad inválida")
-                return {}
-
+            cantidad = self.spin_cantidad.value()
             datos['producto_id'] = producto_id
             datos['cantidad'] = cantidad
             datos['concepto'] = nombre_producto  # Guardar nombre real del producto

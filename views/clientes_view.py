@@ -155,11 +155,13 @@ class AgregarClienteDialog(QDialog):
         self.sexo.addItems(["Masculino", "Femenino", "Otro"])
         layout.addRow("Sexo:", self.sexo)
         
-        # Fecha de nacimiento
+        # Fecha de nacimiento (opcional)
         self.fecha_nacimiento = QDateEdit()
-        self.fecha_nacimiento.setDate(QDate.currentDate().addYears(-25))
         self.fecha_nacimiento.setCalendarPopup(True)
         self.fecha_nacimiento.setDisplayFormat("dd/MM/yyyy")
+        self.fecha_nacimiento.setMinimumDate(QDate(1900, 1, 1))
+        self.fecha_nacimiento.setSpecialValueText("No especificada")
+        self.fecha_nacimiento.setDate(QDate(1900, 1, 1))  # vacío por defecto
         layout.addRow("Fecha de Nacimiento:", self.fecha_nacimiento)
         
         # Email
@@ -189,6 +191,8 @@ class AgregarClienteDialog(QDialog):
         if self.cliente.get('fecha_nacimiento'):
             fecha = date.fromisoformat(self.cliente['fecha_nacimiento'])
             self.fecha_nacimiento.setDate(QDate(fecha.year, fecha.month, fecha.day))
+        else:
+            self.fecha_nacimiento.setDate(QDate(1900, 1, 1))
         
         self.email.setText(self.cliente.get('email') or "")
     
@@ -223,7 +227,7 @@ class AgregarClienteDialog(QDialog):
             return
 
         fecha_nacimiento = self.fecha_nacimiento.date()
-        if fecha_nacimiento > QDate.currentDate():
+        if fecha_nacimiento != QDate(1900, 1, 1) and fecha_nacimiento > QDate.currentDate():
             msg = QMessageBox(self)
             msg.setWindowTitle("Error")
             msg.setText("La fecha de nacimiento no puede ser futura")
@@ -236,11 +240,12 @@ class AgregarClienteDialog(QDialog):
     def obtener_datos(self):
         """Retorna los datos ingresados"""
         fecha = self.fecha_nacimiento.date()
+        fecha_nac = None if fecha == QDate(1900, 1, 1) else date(fecha.year(), fecha.month(), fecha.day()).isoformat()
         return {
             'nombre': self.nombre.text().strip(),
             'telefono': self.telefono.text().strip(),
             'sexo': self.sexo.currentText(),
-            'fecha_nacimiento': date(fecha.year(), fecha.month(), fecha.day()).isoformat(),
+            'fecha_nacimiento': fecha_nac,
             'email': self.email.text().strip()
         }
 

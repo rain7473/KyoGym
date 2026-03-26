@@ -6,7 +6,25 @@ from utils.constants import ESTADO_VENCIDA
 
 
 CATEGORIAS_EGRESO = ["Alquiler", "Servicios", "Sueldos", "Mantenimiento", "Inventario", "Otro"]
-REPORTES_DIR = Path("G:/Mi unidad")
+
+
+def _resolver_reportes_dir() -> Path:
+    """Resuelve el directorio de reportes buscando la unidad G: con
+    los nombres posibles de Google Drive ('Mi unidad' en español o
+    'My Drive' en inglés). Si ninguno existe, devuelve la carpeta
+    local 'reportes'."""
+    candidatos = [
+        Path("G:/Mi unidad"),
+        Path("G:/My Drive"),
+    ]
+    for candidato in candidatos:
+        if candidato.exists():
+            return candidato
+    # Fallback: carpeta local junto al ejecutable
+    return Path("reportes")
+
+
+REPORTES_DIR = _resolver_reportes_dir()
 
 
 # ─────────────────────────── INGRESOS ────────────────────────────

@@ -49,6 +49,50 @@ def crear_pago(cliente_id, monto, metodo, fecha_pago=None, concepto="", producto
     return True, pago_id
 
 
+def crear_pago_multiple(cliente_id, monto, metodo, items, concepto="", fecha_pago=None):
+    """Registra un pago con múltiples ítems (días y/o productos).
+
+    items: lista de dicts con las claves:
+        tipo        ('dia' | 'producto' | 'otro')
+        nombre      str
+        producto_id int | None
+        cantidad    int
+        precio_unit float
+        subtotal    float
+    Descuenta inventario por cada producto antes de insertar el pago.
+    Si cualquier descuento de stock falla, aborta sin registrar el pago.
+    """
+    # ── 1. Verificar y descontar stock de todos los productos ────
+    for item in items:
+        if item.get('tipo') == 'producto' and item.get('producto_id') is not None:
+            ok, mensaje = vender_producto(item['producto_id'], item['cantidad'])
+            if not ok:
+                return False, f"Stock insuficiente para '{item['nombre']}': {mensaje}"
+
+    # ── 2. Insertar el pago ──────────────────────────────────────
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    if fecha_pago is None:
+        fecha_pago = date.today()
+    elif isinstance(fecha_pago, str):
+        fecha_pago = date.fromisoformat(fecha_pago)
+
+    try:
+        cursor.execute("""
+            INSERT INTO pagos (cliente_id, fecha, monto, metodo, concepto)
+            VALUES (?, ?, ?, ?, ?)
+        """, (cliente_id, fecha_pago.isoformat(), monto, metodo, concepto))
+    except Exception as e:
+        conn.close()
+        return False, str(e)
+
+    pago_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return True, pago_id
+
+
 def obtener_pago(pago_id):
     """Obtiene un pago por ID con información del cliente"""
     conn = get_connection()

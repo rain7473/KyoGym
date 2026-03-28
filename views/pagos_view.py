@@ -3,14 +3,14 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
                                QDialog, QFormLayout, QLineEdit, QDateEdit, QComboBox,
                                QMessageBox, QDialogButtonBox, QCompleter, QSpinBox,
-                               QApplication)
-from PySide6.QtCore import Qt, QDate, QSortFilterProxyModel, QObject, QEvent
+                               QApplication, QAbstractItemView)
+from PySide6.QtCore import Qt, QDate, QSize, QSortFilterProxyModel, QObject, QEvent
 from PySide6.QtGui import QFont, QColor
 from datetime import date
 from services import pago_service, cliente_service, membresia_service
 from services import inventario_service
 from utils.factura_generator import generar_factura_pago, abrir_factura
-from utils.iconos_ui import crear_boton_icono, crear_widget_centrado
+from utils.iconos_ui import crear_boton_icono, crear_widget_centrado, _svg_icon_color as _svg_ic
 from utils.table_styles import aplicar_estilo_tabla_moderna
 from utils.table_utils import limpiar_tabla
 from utils.validators import crear_validador_numerico_decimal, crear_validador_entero
@@ -24,15 +24,17 @@ class RegistrarPagoDialog(QDialog):
         super().__init__(parent)
         self.pago = pago
         self.setWindowTitle("Editar Pago" if pago else "Registrar Pago")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(520)
         self.init_ui()
         
         if pago:
             self.cargar_datos_pago()
     
     def init_ui(self):
+        main_layout = QVBoxLayout()
         layout = QFormLayout()
-        
+        main_layout.addLayout(layout)
+
         # Estilos para el diálogo
         self.setStyleSheet("""
             QDialog {
@@ -196,57 +198,97 @@ class RegistrarPagoDialog(QDialog):
         self.fecha.setDisplayFormat("dd/MM/yyyy")
         layout.addRow("Fecha:", self.fecha)
         
-        # Monto
-        self.monto = QLineEdit()
-        self.monto.setPlaceholderText("0.00")
-        self.monto.setValidator(crear_validador_numerico_decimal())
-        layout.addRow("Monto:", self.monto)
-        
         # Método de pago
         self.metodo = QComboBox()
         self.metodo.addItems(["Efectivo", "Tarjeta", "Transferencia", "Otro"])
         layout.addRow("Método:", self.metodo)
-        
-        # Concepto (Tipo)
-        self.concepto = QComboBox()
-        self.concepto.addItems(["Pago de día", "Producto"])
-        layout.addRow("Concepto:", self.concepto)
 
-        # Selector de producto (oculto por defecto)
-        self.combo_producto = QComboBox()
-        self.combo_producto.setVisible(False)
-        layout.addRow("Producto:", self.combo_producto)
+        # ─── Items del pago ──────────────────────────────────────
+        lbl_items = QLabel("Items del pago:")
+        lbl_items.setStyleSheet("color: #2c2c2c; font-weight: bold; font-size: 13px; margin-top: 6px;")
+        main_layout.addWidget(lbl_items)
 
-        # Campo cantidad con flechas (oculto por defecto)
-        self.spin_cantidad = QSpinBox()
-        self.spin_cantidad.setMinimum(1)
-        self.spin_cantidad.setMaximum(999)
-        self.spin_cantidad.setValue(1)
-        self.spin_cantidad.setVisible(False)
-        layout.addRow("Cantidad:", self.spin_cantidad)
+        self._items = []
+        self.tabla_items = QTableWidget(0, 4)
+        self.tabla_items.setHorizontalHeaderLabels(["Concepto", "Cant.", "Subtotal", "Elim."])
+        self.tabla_items.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.tabla_items.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        self.tabla_items.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.tabla_items.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
+        self.tabla_items.horizontalHeader().resizeSection(3, 58)
+        self.tabla_items.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
+        self.tabla_items.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.tabla_items.setFixedHeight(150)
+        self.tabla_items.verticalHeader().setDefaultSectionSize(32)
+        self.tabla_items.setStyleSheet("""
+            QTableWidget { background-color: #f5f5f5; border: 1px solid #d0d0d0; }
+            QHeaderView::section { background-color: #e0e0e0; color: #2c2c2c; font-weight: bold; padding: 4px; }
+            QTableWidget::item { color: #1a1a1a; padding: 4px; }
+            QTableWidget QLineEdit { color: #1a1a1a; background-color: white; border: 1px solid #808080; padding: 2px; }
+        """)
+        main_layout.addWidget(self.tabla_items)
+        self.tabla_items.cellChanged.connect(self._on_subtotal_editado)
 
-        # Cargar productos
+        # Fila para agregar items
+        add_row_widget = QWidget()
+        add_row_layout = QHBoxLayout(add_row_widget)
+        add_row_layout.setContentsMargins(0, 0, 0, 0)
+        add_row_layout.setSpacing(6)
+
+        self.combo_tipo_item = QComboBox()
+        self.combo_tipo_item.addItems(["Pago de día", "Producto"])
+        self.combo_tipo_item.currentTextChanged.connect(self._toggle_add_item_fields)
+        add_row_layout.addWidget(self.combo_tipo_item)
+
+        self.combo_cat_add = QComboBox()
+        self.combo_cat_add.setVisible(False)
+        self.combo_cat_add.setFixedWidth(110)
+        add_row_layout.addWidget(self.combo_cat_add)
+
+        self.combo_prod_add = QComboBox()
+        self.combo_prod_add.setVisible(False)
+        add_row_layout.addWidget(self.combo_prod_add, 1)
+
+        self.spin_cant_add = QSpinBox()
+        self.spin_cant_add.setMinimum(1)
+        self.spin_cant_add.setMaximum(999)
+        self.spin_cant_add.setValue(1)
+        self.spin_cant_add.setFixedWidth(65)
+        self.spin_cant_add.setVisible(False)
+        add_row_layout.addWidget(self.spin_cant_add)
+
+        self.btn_agregar_item = QPushButton("+ Agregar")
+        self.btn_agregar_item.setFixedHeight(34)
+        self.btn_agregar_item.clicked.connect(self._agregar_item)
+        add_row_layout.addWidget(self.btn_agregar_item)
+
+        main_layout.addWidget(add_row_widget)
+
+        # Total
+        total_widget = QWidget()
+        total_layout = QHBoxLayout(total_widget)
+        total_layout.setContentsMargins(0, 2, 0, 2)
+        total_layout.addStretch()
+        self.lbl_total = QLabel("Total: $0.00")
+        total_font = QFont()
+        total_font.setBold(True)
+        total_font.setPointSize(12)
+        self.lbl_total.setFont(total_font)
+        self.lbl_total.setStyleSheet("color: #2c3e50;")
+        total_layout.addWidget(self.lbl_total)
+        main_layout.addWidget(total_widget)
+
+        # Cargar productos y configurar campos
         self.cargar_productos()
-
-        # Detectar cambio de concepto, producto y cantidad
-        self.concepto.currentTextChanged.connect(self.toggle_producto_fields)
-        self.combo_producto.currentIndexChanged.connect(
-            lambda _: self._actualizar_monto_producto()
-        )
-        self.spin_cantidad.valueChanged.connect(
-            lambda _: self._actualizar_monto_producto()
-        )
-
-        # Establecer monto inicial según concepto por defecto
-        self.toggle_producto_fields(self.concepto.currentText())
+        self._toggle_add_item_fields(self.combo_tipo_item.currentText())
 
         # Botones
         botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         botones.accepted.connect(self.aceptar)
         botones.rejected.connect(self.reject)
-        layout.addRow(botones)
-        
-        self.setLayout(layout)
+        main_layout.addWidget(botones)
+
+        self.setLayout(main_layout)
     
     def cargar_clientes(self):
         """Carga la lista de clientes con búsqueda en tiempo real"""
@@ -318,42 +360,147 @@ class RegistrarPagoDialog(QDialog):
         line_edit.clear()
 
     def cargar_productos(self):
-        """Carga productos en el combo almacenando el precio unitario"""
-        productos = inventario_service.listar_productos()
-        self.combo_producto.clear()
+        """Carga productos disponibles en el combo, filtrados por la categoría seleccionada"""
+        todos = inventario_service.listar_productos()
+        # Poblar categorías la primera vez
+        if self.combo_cat_add.count() == 0:
+            categorias = sorted({p['categoria'] for p in todos if p.get('categoria')})
+            self.combo_cat_add.blockSignals(True)
+            self.combo_cat_add.addItem("Todas")
+            for cat in categorias:
+                self.combo_cat_add.addItem(cat)
+            self.combo_cat_add.blockSignals(False)
+            self.combo_cat_add.currentTextChanged.connect(self.cargar_productos)
 
+        cat_sel = self.combo_cat_add.currentText()
+        if cat_sel and cat_sel != "Todas":
+            productos = [p for p in todos if p.get('categoria') == cat_sel]
+        else:
+            productos = todos
+
+        self.combo_prod_add.blockSignals(True)
+        self.combo_prod_add.clear()
         for i, producto in enumerate(productos):
-            self.combo_producto.addItem(producto['nombre'], producto['id'])
-            self.combo_producto.setItemData(i, float(producto.get('precio', 0.0)), Qt.UserRole + 1)
+            self.combo_prod_add.addItem(producto['nombre'], producto['id'])
+            self.combo_prod_add.setItemData(i, float(producto.get('precio', 0.0)), Qt.UserRole + 1)
+        self.combo_prod_add.blockSignals(False)
 
-    def toggle_producto_fields(self, texto):
-        """Muestra u oculta campos según concepto y rellena monto automáticamente"""
-        es_producto = texto == "Producto"
-        self.combo_producto.setVisible(es_producto)
-        self.spin_cantidad.setVisible(es_producto)
-        if getattr(self, '_cargando', False):
+    def _toggle_add_item_fields(self, tipo):
+        """Muestra u oculta campos del panel agregar según el tipo seleccionado"""
+        es_producto = tipo == "Producto"
+        self.combo_cat_add.setVisible(es_producto)
+        self.combo_prod_add.setVisible(es_producto)
+        self.spin_cant_add.setVisible(es_producto)
+
+    def _agregar_item(self):
+        """Agrega un item al carrito de pago"""
+        tipo = self.combo_tipo_item.currentText()
+        if tipo == "Pago de día":
+            nombre = "Pago de día"
+            producto_id = None
+            cantidad = 1
+            precio_unit = 2.0
+        else:
+            idx = self.combo_prod_add.currentIndex()
+            if idx < 0 or self.combo_prod_add.count() == 0:
+                return
+            nombre = self.combo_prod_add.currentText()
+            producto_id = self.combo_prod_add.currentData()
+            cantidad = self.spin_cant_add.value()
+            try:
+                precio_unit = float(self.combo_prod_add.itemData(idx, Qt.UserRole + 1) or 0.0)
+            except (TypeError, ValueError):
+                precio_unit = 0.0
+
+        self._items.append({
+            'nombre': nombre,
+            'tipo': 'dia' if tipo == "Pago de día" else 'producto',
+            'producto_id': producto_id,
+            'cantidad': cantidad,
+            'precio_unit': precio_unit,
+            'subtotal': precio_unit * cantidad,
+        })
+        self._refrescar_tabla_items()
+        self._actualizar_total()
+
+    def _eliminar_item(self, idx):
+        """Elimina un item del carrito por índice"""
+        if 0 <= idx < len(self._items):
+            self._items.pop(idx)
+        self._refrescar_tabla_items()
+        self._actualizar_total()
+
+    def _refrescar_tabla_items(self):
+        """Refresca la tabla visual con los items actuales del carrito"""
+        self.tabla_items.blockSignals(True)
+        self.tabla_items.setRowCount(0)
+        for i, item in enumerate(self._items):
+            row = self.tabla_items.rowCount()
+            self.tabla_items.insertRow(row)
+            label = item['nombre']
+            if item['tipo'] == 'producto' and item['cantidad'] > 1:
+                label += f" x{item['cantidad']}"
+
+            # Concepto y Cant.: solo lectura
+            item_concepto = QTableWidgetItem(label)
+            item_concepto.setFlags(Qt.ItemIsEnabled)
+            self.tabla_items.setItem(row, 0, item_concepto)
+
+            item_cant = QTableWidgetItem(str(item['cantidad']))
+            item_cant.setFlags(Qt.ItemIsEnabled)
+            self.tabla_items.setItem(row, 1, item_cant)
+
+            # Subtotal: editable (doble clic)
+            item_sub = QTableWidgetItem(f"{item['subtotal']:.2f}")
+            item_sub.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable | Qt.ItemIsEditable)
+            item_sub.setToolTip("Doble clic para editar el subtotal")
+            item_sub.setForeground(QColor("#1a6fa8"))
+            self.tabla_items.setItem(row, 2, item_sub)
+
+            btn_x = QPushButton()
+            btn_x.setIcon(_svg_ic("delete.svg", QColor("white"), 15))
+            btn_x.setIconSize(QSize(15, 15))
+            btn_x.setFixedSize(28, 28)
+            btn_x.setToolTip("Eliminar")
+            btn_x.setCursor(Qt.PointingHandCursor)
+            btn_x.setStyleSheet(
+                "QPushButton { background-color: #e74c3c; border-radius: 4px; border: none; }"
+                " QPushButton:hover { background-color: #c0392b; }"
+            )
+            btn_x.clicked.connect(lambda checked, idx_=i: self._eliminar_item(idx_))
+            self.tabla_items.setCellWidget(row, 3, crear_widget_centrado(btn_x))
+        self.tabla_items.blockSignals(False)
+
+    def _on_subtotal_editado(self, row, col):
+        """Actualiza el subtotal del item cuando el usuario lo edita directamente"""
+        if col != 2:
             return
-        if texto == "Pago de día":
-            self.monto.setText("2.00")
-        elif texto == "Producto":
-            self._actualizar_monto_producto()
-
-    def _get_precio_producto_actual(self):
-        """Devuelve el precio unitario del producto seleccionado"""
-        idx = self.combo_producto.currentIndex()
-        precio = self.combo_producto.itemData(idx, Qt.UserRole + 1)
+        if row < 0 or row >= len(self._items):
+            return
+        item_widget = self.tabla_items.item(row, col)
+        if item_widget is None:
+            return
+        texto = item_widget.text().strip().replace(',', '.').replace('$', '')
         try:
-            return float(precio) if precio is not None else 0.0
-        except (TypeError, ValueError):
-            return 0.0
-
-    def _actualizar_monto_producto(self):
-        """Actualiza el monto según precio × cantidad del producto seleccionado"""
-        if getattr(self, '_cargando', False):
+            nuevo_subtotal = float(texto)
+            if nuevo_subtotal < 0:
+                raise ValueError
+        except ValueError:
+            # Revertir al valor anterior sin disparar el signal
+            self.tabla_items.blockSignals(True)
+            item_widget.setText(f"{self._items[row]['subtotal']:.2f}")
+            self.tabla_items.blockSignals(False)
             return
-        precio = self._get_precio_producto_actual()
-        cantidad = self.spin_cantidad.value()
-        self.monto.setText(f"{precio * cantidad:.2f}")
+        self._items[row]['subtotal'] = nuevo_subtotal
+        # Actualizar precio_unit proporcional
+        cant = self._items[row].get('cantidad', 1) or 1
+        self._items[row]['precio_unit'] = nuevo_subtotal / cant
+        self._actualizar_total()
+
+    def _actualizar_total(self):
+        """Actualiza la etiqueta con el total del carrito"""
+        total = sum(item['subtotal'] for item in self._items)
+        self.lbl_total.setText(f"Total: ${total:.2f}")
 
     def _verificar_cliente_estado(self, text):
         """Muestra botón + o check verde según si el cliente existe en la lista"""
@@ -391,56 +538,57 @@ class RegistrarPagoDialog(QDialog):
                 self.combo_cliente.setCurrentIndex(idx)
 
     def cargar_datos_pago(self):
-        """Carga los datos del pago a editar"""
+        """Carga los datos del pago a editar reconstruyendo el carrito"""
         if not self.pago:
             return
 
-        self._cargando = True
+        # Cliente
+        for i in range(self.combo_cliente.count()):
+            if self.combo_cliente.itemData(i) == self.pago['cliente_id']:
+                self.combo_cliente.setCurrentIndex(i)
+                break
+
+        # Fecha
+        fecha_parts = self.pago['fecha'].split('-')
+        self.fecha.setDate(QDate(int(fecha_parts[0]), int(fecha_parts[1]), int(fecha_parts[2])))
+
+        # Método
+        metodo = self.pago.get('metodo', self.pago.get('metodo_pago', 'Efectivo'))
+        index = self.metodo.findText(metodo)
+        if index >= 0:
+            self.metodo.setCurrentIndex(index)
+
+        # Reconstruir items desde el pago guardado
+        concepto = self.pago.get('concepto', '')
+        producto_id = self.pago.get('producto_id')
+        monto = float(self.pago.get('monto', 0))
         try:
-            # Seleccionar cliente
-            for i in range(self.combo_cliente.count()):
-                if self.combo_cliente.itemData(i) == self.pago['cliente_id']:
-                    self.combo_cliente.setCurrentIndex(i)
-                    break
+            cantidad = int(self.pago.get('cantidad', 1) or 1)
+        except (TypeError, ValueError):
+            cantidad = 1
 
-            # Fecha
-            fecha_parts = self.pago['fecha'].split('-')
-            self.fecha.setDate(QDate(int(fecha_parts[0]), int(fecha_parts[1]), int(fecha_parts[2])))
+        if concepto == "Pago de día":
+            self._items = [{
+                'nombre': 'Pago de día', 'tipo': 'dia',
+                'producto_id': None, 'cantidad': 1,
+                'precio_unit': monto, 'subtotal': monto,
+            }]
+        elif producto_id is not None:
+            precio_unit = monto / max(cantidad, 1)
+            self._items = [{
+                'nombre': concepto, 'tipo': 'producto',
+                'producto_id': producto_id, 'cantidad': cantidad,
+                'precio_unit': precio_unit, 'subtotal': monto,
+            }]
+        else:
+            self._items = [{
+                'nombre': concepto or 'Pago', 'tipo': 'otro',
+                'producto_id': None, 'cantidad': 1,
+                'precio_unit': monto, 'subtotal': monto,
+            }]
 
-            # Método
-            metodo = self.pago.get('metodo_pago', 'Efectivo')
-            index = self.metodo.findText(metodo)
-            if index >= 0:
-                self.metodo.setCurrentIndex(index)
-
-            # Concepto
-            concepto_guardado = self.pago.get('concepto', '')
-            index = self.concepto.findText(concepto_guardado)
-            if index >= 0:
-                self.concepto.setCurrentIndex(index)
-                es_producto = False
-            else:
-                # Es un nombre de producto directamente almacenado
-                self.concepto.setCurrentText('Producto')
-                es_producto = True
-
-            # Si es producto: seleccionar el producto y la cantidad
-            if es_producto:
-                concepto_nombre = self.pago.get('concepto', '')
-                for i in range(self.combo_producto.count()):
-                    if self.combo_producto.itemText(i) == concepto_nombre:
-                        self.combo_producto.setCurrentIndex(i)
-                        break
-                try:
-                    cantidad = int(self.pago.get('cantidad', 1) or 1)
-                except (TypeError, ValueError):
-                    cantidad = 1
-                self.spin_cantidad.setValue(max(1, cantidad))
-
-            # Monto siempre al final para no ser sobreescrito
-            self.monto.setText(str(self.pago['monto']))
-        finally:
-            self._cargando = False
+        self._refrescar_tabla_items()
+        self._actualizar_total()
     
     def aceptar(self):
         """Valida y acepta el diálogo"""
@@ -464,72 +612,43 @@ class RegistrarPagoDialog(QDialog):
             msg.setStyleSheet(MSG_STYLE)
             msg.exec()
             return
-        
-        try:
-            monto_texto = self.monto.text().strip()
-            if not monto_texto:
-                raise ValueError("Monto vacío")
-            monto = float(monto_texto.replace(',', '.'))
-            if monto <= 0:
-                raise ValueError()
-        except ValueError:
+
+        if not self._items:
             msg = QMessageBox(self)
             msg.setWindowTitle("Error")
-            msg.setText("Ingrese un monto válido mayor a 0 (puede usar decimales, ej: 0.50)")
-            msg.setStyleSheet("""
-                QMessageBox {
-                    background-color: #ffffff;
-                }
-                QLabel {
-                    color: #2c2c2c;
-                    font-size: 13px;
-                    min-width: 300px;
-                }
-                QPushButton {
-                    background-color: #2c3e50;
-                    color: white;
-                    padding: 8px 20px;
-                    border: none;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 13px;
-                    min-width: 80px;
-                }
-                QPushButton:hover {
-                    background-color: #3d5166;
-                }
-            """)
+            msg.setText("Agregue al menos un item al pago")
+            msg.setStyleSheet(MSG_STYLE)
             msg.exec()
             return
-        
+
         self.accept()
     
     def obtener_datos(self):
-        """Retorna los datos ingresados"""
+        """Retorna los datos del carrito de pago"""
         fecha = self.fecha.date()
         texto_campo = self.combo_cliente.lineEdit().text().strip()
         idx = self.combo_cliente.findText(texto_campo, Qt.MatchExactly)
         cliente_id = self.combo_cliente.itemData(idx) if idx >= 0 else None
-        concepto_texto = self.concepto.currentText()
-        monto_texto = self.monto.text().strip()
 
-        datos = {
+        total = sum(item['subtotal'] for item in self._items)
+
+        # Construir concepto como cadena de nombres
+        partes = []
+        for item in self._items:
+            nombre = item['nombre']
+            if item['tipo'] == 'producto' and item['cantidad'] > 1:
+                nombre += f" x{item['cantidad']}"
+            partes.append(nombre)
+        concepto = " + ".join(partes) if partes else ""
+
+        return {
             'cliente_id': cliente_id,
             'fecha': date(fecha.year(), fecha.month(), fecha.day()),
-            'monto': float(monto_texto.replace(',', '.')) if monto_texto else 0.0,
+            'monto': total,
             'metodo': self.metodo.currentText(),
-            'concepto': concepto_texto
+            'concepto': concepto,
+            'items': list(self._items),
         }
-
-        if concepto_texto == "Producto":
-            producto_id = self.combo_producto.currentData()
-            nombre_producto = self.combo_producto.currentText()
-            cantidad = self.spin_cantidad.value()
-            datos['producto_id'] = producto_id
-            datos['cantidad'] = cantidad
-            datos['concepto'] = nombre_producto  # Guardar nombre real del producto
-
-        return datos
 
 
 class PagosView(QWidget):
@@ -1038,14 +1157,13 @@ class PagosView(QWidget):
             if not datos:
                 return
             
-            ok, resultado = pago_service.crear_pago(
+            ok, resultado = pago_service.crear_pago_multiple(
                 cliente_id=datos['cliente_id'],
                 fecha_pago=datos['fecha'],
                 monto=datos['monto'],
                 metodo=datos['metodo'],
                 concepto=datos['concepto'],
-                producto_id=datos.get('producto_id'),
-                cantidad=datos.get('cantidad', 1)
+                items=datos.get('items', []),
             )
 
             if not ok:
@@ -1058,7 +1176,7 @@ class PagosView(QWidget):
             # Generar factura
             pago = pago_service.obtener_pago(pago_id)
             cliente = cliente_service.obtener_cliente(datos['cliente_id'])
-            ruta_factura = generar_factura_pago(pago, cliente)
+            ruta_factura = generar_factura_pago(pago, cliente, items=datos.get('items', []))
             
             self.cargar_datos()
             self.actualizar_total_mes()

@@ -312,7 +312,7 @@ def abrir_factura(ruta_pdf):
         subprocess.run(["xdg-open", ruta_pdf])
 
 
-def generar_factura_pago(pago, cliente, ruta_salida=None):
+def generar_factura_pago(pago, cliente, ruta_salida=None, items=None):
     """
     Genera una factura PDF para un pago (mismo diseño que membresía)
     
@@ -320,6 +320,7 @@ def generar_factura_pago(pago, cliente, ruta_salida=None):
         pago: Diccionario con datos del pago (id, fecha, monto, metodo, concepto)
         cliente: Diccionario con datos del cliente (nombre, telefono)
         ruta_salida: Ruta donde guardar el PDF (opcional)
+        items: Lista de dicts con {nombre, cantidad, subtotal} para pago múltiple (opcional)
     
     Returns:
         Ruta del archivo PDF generado
@@ -429,28 +430,49 @@ def generar_factura_pago(pago, cliente, ruta_salida=None):
     
     # Encabezado de artículos
     c.setFont(fuente_bold, 9)
-    try:
-        cantidad = int(pago.get('cantidad', 1) or 1)
-    except Exception:
-        cantidad = 1
-    if cantidad <= 0:
-        cantidad = 1
-    etiqueta_articulo = "artículo" if cantidad == 1 else "artículos"
-    c.drawString(margen_izq, y_pos, f"{cantidad} {etiqueta_articulo} (Cant.: {cantidad})")
+    n_items = len(items) if items else 1
+    etiqueta_articulo = "artículo" if n_items == 1 else "artículos"
+    c.drawString(margen_izq, y_pos, f"{n_items} {etiqueta_articulo}")
     y_pos -= 6 * mm
     
     # Línea separadora
     c.line(margen_izq, y_pos, ancho_ticket - margen_izq, y_pos)
     y_pos -= 5 * mm
     
-    # Artículo: Pago
+    # Artículos: uno por línea
     c.setFont(fuente_normal, 9)
-    concepto = pago.get('concepto', 'Pago')
-    c.drawString(margen_izq, y_pos, f"{cantidad}x  {concepto}")
-    monto_texto = f"${pago['monto']:.2f}"
-    ancho_monto = c.stringWidth(monto_texto, fuente_normal, 9)
-    c.drawString(ancho_ticket - margen_izq - ancho_monto, y_pos, monto_texto)
-    y_pos -= 6 * mm
+    if items:
+        for item in items:
+            nombre_item = item.get('nombre', '')
+            cant_item = item.get('cantidad', 1)
+            subtotal_item = float(item.get('subtotal', 0))
+            label = f"{cant_item}x  {nombre_item}"
+            monto_texto = f"${subtotal_item:.2f}"
+            ancho_monto = c.stringWidth(monto_texto, fuente_normal, 9)
+            # Si el label es muy largo, truncarlo
+            max_label_w = ancho_contenido - ancho_monto - 2 * mm
+            while c.stringWidth(label, fuente_normal, 9) > max_label_w and len(label) > 4:
+                label = label[:-1]
+            c.drawString(margen_izq, y_pos, label)
+            c.drawString(ancho_ticket - margen_izq - ancho_monto, y_pos, monto_texto)
+            y_pos -= 6 * mm
+    else:
+        concepto = pago.get('concepto', 'Pago')
+        try:
+            cantidad = int(pago.get('cantidad', 1) or 1)
+        except Exception:
+            cantidad = 1
+        if cantidad <= 0:
+            cantidad = 1
+        label = f"{cantidad}x  {concepto}"
+        monto_texto = f"${pago['monto']:.2f}"
+        ancho_monto = c.stringWidth(monto_texto, fuente_normal, 9)
+        max_label_w = ancho_contenido - ancho_monto - 2 * mm
+        while c.stringWidth(label, fuente_normal, 9) > max_label_w and len(label) > 4:
+            label = label[:-1]
+        c.drawString(margen_izq, y_pos, label)
+        c.drawString(ancho_ticket - margen_izq - ancho_monto, y_pos, monto_texto)
+        y_pos -= 6 * mm
     
     # Fecha del pago
     c.setFont(fuente_normal, 7)
@@ -476,18 +498,30 @@ def generar_factura_pago(pago, cliente, ruta_salida=None):
     
     # Subtotal
     c.setFont(fuente_normal, 9)
-    c.drawString(ancho_ticket - margen_izq - 25*mm, y_pos, "Subtotal:")
     subtotal_texto = f"${pago['monto']:.2f}"
     ancho_subtotal = c.stringWidth(subtotal_texto, fuente_normal, 9)
-    c.drawString(ancho_ticket - margen_izq - ancho_subtotal, y_pos, subtotal_texto)
+    etiq_sub = "Subtotal:"
+    ancho_etiq_sub = c.stringWidth(etiq_sub, fuente_normal, 9)
+    x_sub_val = ancho_ticket - margen_izq - ancho_subtotal
+    x_sub_etiq = x_sub_val - 2 * mm - ancho_etiq_sub
+    if x_sub_etiq < margen_izq:
+        x_sub_etiq = margen_izq
+    c.drawString(x_sub_etiq, y_pos, etiq_sub)
+    c.drawString(x_sub_val, y_pos, subtotal_texto)
     y_pos -= 5 * mm
-    
+
     # Total
     c.setFont(fuente_bold, 12)
-    c.drawString(ancho_ticket - margen_izq - 25*mm, y_pos, "Total:")
     total_texto = f"${pago['monto']:.2f}"
     ancho_total = c.stringWidth(total_texto, fuente_bold, 12)
-    c.drawString(ancho_ticket - margen_izq - ancho_total, y_pos, total_texto)
+    etiq_tot = "Total:"
+    ancho_etiq_tot = c.stringWidth(etiq_tot, fuente_bold, 12)
+    x_tot_val = ancho_ticket - margen_izq - ancho_total
+    x_tot_etiq = x_tot_val - 2 * mm - ancho_etiq_tot
+    if x_tot_etiq < margen_izq:
+        x_tot_etiq = margen_izq
+    c.drawString(x_tot_etiq, y_pos, etiq_tot)
+    c.drawString(x_tot_val, y_pos, total_texto)
     y_pos -= 6 * mm
     
     # Pagado / entregado al cajero (no siempre es efectivo)

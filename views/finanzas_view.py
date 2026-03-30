@@ -578,6 +578,58 @@ class FinanzasView(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(14)
 
+        # ── Sección: Reporte Diario (ARRIBA) ─────────────────────
+        lbl_diario_top = QLabel("Reporte Diario")
+        lbl_diario_top.setFont(QFont("Arial", 13, QFont.Bold))
+        lbl_diario_top.setStyleSheet("color:#1a1a1a;")
+        layout.addWidget(lbl_diario_top)
+
+        ctrl_dia_top = QHBoxLayout()
+        ctrl_dia_top.setSpacing(12)
+
+        lbl_dia_top = QLabel("Día:")
+        lbl_dia_top.setStyleSheet("color:#555; font-size:13px;")
+        ctrl_dia_top.addWidget(lbl_dia_top)
+
+        self.rpt_dia_top = QDateEdit()
+        self.rpt_dia_top.setCalendarPopup(True)
+        self.rpt_dia_top.setDate(QDate.currentDate())
+        self.rpt_dia_top.setDisplayFormat("dd/MM/yyyy")
+        self.rpt_dia_top.setStyleSheet(_ESTILO_DATE)
+        ctrl_dia_top.addWidget(self.rpt_dia_top)
+
+        btn_pdf_dia_top = QPushButton("\U0001f4c4 PDF del día")
+        btn_pdf_dia_top.setStyleSheet("""
+            QPushButton { background-color:#e74c3c; color:white; padding:8px 18px;
+                          border:none; border-radius:4px; font-size:13px; font-weight:bold; }
+            QPushButton:hover { background-color:#c0392b; }
+        """)
+        btn_pdf_dia_top.clicked.connect(lambda: self._exportar_pdf_diario(self.rpt_dia_top))
+        ctrl_dia_top.addWidget(btn_pdf_dia_top)
+
+        btn_excel_dia_top = QPushButton("\U0001f4ca Excel del día")
+        btn_excel_dia_top.setStyleSheet("""
+            QPushButton { background-color:#27ae60; color:white; padding:8px 18px;
+                          border:none; border-radius:4px; font-size:13px; font-weight:bold; }
+            QPushButton:hover { background-color:#219a52; }
+        """)
+        btn_excel_dia_top.clicked.connect(lambda: self._exportar_excel_diario(self.rpt_dia_top))
+        ctrl_dia_top.addWidget(btn_excel_dia_top)
+
+        ctrl_dia_top.addStretch()
+        layout.addLayout(ctrl_dia_top)
+
+        sep_top = QFrame()
+        sep_top.setFrameShape(QFrame.HLine)
+        sep_top.setStyleSheet("color:#d0d0d0; background:#d0d0d0; max-height:1px;")
+        layout.addWidget(sep_top)
+
+        # ── Sección: Reportes Mensuales/Anuales ──────────────────
+        lbl_mensual = QLabel("Reportes Mensuales/Anuales")
+        lbl_mensual.setFont(QFont("Arial", 13, QFont.Bold))
+        lbl_mensual.setStyleSheet("color:#1a1a1a; padding-bottom:4px;")
+        layout.addWidget(lbl_mensual)
+
         # Controles
         ctrl_layout = QHBoxLayout()
         ctrl_layout.setSpacing(12)
@@ -1174,6 +1226,38 @@ class FinanzasView(QWidget):
             self.tabla_comparacion.setItem(row_total, col, item)
 
         self.tabla_comparacion.setSortingEnabled(True)
+
+    def _exportar_pdf_diario(self, date_edit=None):
+        qd = (date_edit or self.rpt_dia_top).date()
+        fecha = date(qd.year(), qd.month(), qd.day())
+        try:
+            ruta = finanzas_service.exportar_pdf_reporte_diario(fecha=fecha)
+            msg = QMessageBox(self)
+            msg.setWindowTitle("PDF diario generado")
+            msg.setText(f"Archivo guardado en:\n{ruta}")
+            btn_abrir = msg.addButton("Abrir PDF", QMessageBox.ActionRole)
+            msg.addButton("Cerrar", QMessageBox.RejectRole)
+            msg.exec()
+            if msg.clickedButton() == btn_abrir:
+                _abrir_archivo(ruta)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+
+    def _exportar_excel_diario(self, date_edit=None):
+        qd = (date_edit or self.rpt_dia_top).date()
+        fecha = date(qd.year(), qd.month(), qd.day())
+        try:
+            ruta = finanzas_service.exportar_excel_reporte_diario(fecha=fecha)
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Excel diario generado")
+            msg.setText(f"Archivo guardado en:\n{ruta}")
+            btn_abrir = msg.addButton("Abrir carpeta", QMessageBox.ActionRole)
+            msg.addButton("Cerrar", QMessageBox.RejectRole)
+            msg.exec()
+            if msg.clickedButton() == btn_abrir:
+                _abrir_carpeta(ruta)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
 
     def _exportar_excel(self):
         año, mes = self._get_año_mes_rpt()

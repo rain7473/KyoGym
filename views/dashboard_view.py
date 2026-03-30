@@ -703,7 +703,13 @@ class DashboardView(QWidget):
         
         self.chart_torta_sexo = SimplePieChart()
         layout_torta_sexo.addWidget(self.chart_torta_sexo)
-        
+
+        self.lbl_total_clientes_sexo = QLabel("Total clientes: 0")
+        self.lbl_total_clientes_sexo.setFont(QFont("Arial", 13, QFont.Bold))
+        self.lbl_total_clientes_sexo.setStyleSheet("color:#2c6fad; padding:4px 0; background:transparent;")
+        self.lbl_total_clientes_sexo.setAlignment(Qt.AlignCenter)
+        layout_torta_sexo.addWidget(self.lbl_total_clientes_sexo)
+
         graficos_layout.addWidget(frame_torta_sexo, 1)
         
         layout.addLayout(graficos_layout)
@@ -936,7 +942,9 @@ class DashboardView(QWidget):
             ("Otro", conteo_sexo['Otro'], QColor("#9b59b6"))
         ]
         self.chart_torta_sexo.update()
-        
+        total_clientes = sum(conteo_sexo.values())
+        self.lbl_total_clientes_sexo.setText(f"Total clientes: {total_clientes}")
+
         # Pagos: si hay filtro de fecha, calcular con ese rango
         if self.filtro_fecha_desde and self.filtro_fecha_hasta:
             pagos_filtrados = pago_service.listar_pagos(

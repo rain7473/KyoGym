@@ -175,6 +175,29 @@ def init_database():
     except Exception:
         pass  # Ya existe
 
+    # Tabla de asistencias
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS asistencias (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cliente_id INTEGER NOT NULL,
+            fecha DATE NOT NULL,
+            hora_entrada TEXT,
+            hora_salida TEXT,
+            observacion TEXT,
+            origen TEXT DEFAULT 'manual',
+            UNIQUE(cliente_id, fecha),
+            FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_asistencias_cliente
+        ON asistencias(cliente_id)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_asistencias_fecha
+        ON asistencias(fecha)
+    """)
+
     conn.commit()
     conn.close()
     

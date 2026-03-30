@@ -445,3 +445,370 @@ def exportar_pdf_reporte(año=None, mes=None):
 
     doc.build(story)
     return str(output_path)
+
+
+# ─────────────────────────── ESTADÍSTICAS DE CLIENTES ────────────
+
+def obtener_estadisticas_clientes():
+    """Devuelve un resumen general de clientes:
+    - total_clientes: todos los clientes registrados
+    - con_membresia_activa: clientes con membresía activa o por vencer
+    - con_membresia_vencida: clientes con membresía vencida
+    - sin_membresia: clientes sin ninguna membresía registrada
+    - promedio_gasto_cliente: promedio de gasto por cliente (sobre los que han pagado)
+    """
+    from services.membresia_service import listar_membresias
+    from utils.constants import ESTADO_ACTIVA, ESTADO_POR_VENCER
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) as total FROM clientes")
+    total = cur.fetchone()["total"]
+    conn.close()
+
+    todas = listar_membresias()
+    ids_con_membresia = set(m["cliente_id"] for m in todas)
+
+    activas = sum(1 for m in todas if m["estado"] in (ESTADO_ACTIVA, ESTADO_POR_VENCER))
+    vencidas = sum(1 for m in todas if m["estado"] == ESTADO_VENCIDA)
+    sin_membresia = total - len(ids_con_membresia)
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT AVG(total_por_cliente) as promedio
+        FROM (
+            SELECT cliente_id, SUM(monto) as total_por_cliente
+            FROM pagos
+            GROUP BY cliente_id
+        )
+    """)
+    row = cur.fetchone()
+    promedio = round(row["promedio"] or 0, 2)
+    conn.close()
+
+    return {
+        "total_clientes": total,
+        "con_membresia_activa": activas,
+        "con_membresia_vencida": vencidas,
+        "sin_membresia": sin_membresia,
+        "promedio_gasto_cliente": promedio,
+    }
+
+
+def obtener_gasto_por_cliente(fecha_desde=None, fecha_hasta=None):
+    """Devuelve todos los clientes activos con su total gastado y cantidad de pagos.
+    Incluye clientes que nunca han pagado (total = 0).
+    Soporta filtro opcional por fechas."""
+    sub_wheres = ["1=1"]
+    sub_params = []
+    if fecha_desde:
+        sub_wheres.append("p.fecha >= ?")
+        sub_params.append(fecha_desde if isinstance(fecha_desde, str) else fecha_desde.isoformat())
+    if fecha_hasta:
+        sub_wheres.append("p.fecha <= ?")
+        sub_params.append(fecha_hasta if isinstance(fecha_hasta, str) else fecha_hasta.isoformat())
+    sub_where_clause = " AND ".join(sub_wheres)
+
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(f"""
+        SELECT c.id, c.nombre, c.sexo,
+               COALESCE(sub.total_pagado, 0) AS total_pagado,
+               COALESCE(sub.cantidad_pagos, 0) AS cantidad_pagos
+        FROM clientes c
+        LEFT JOIN (
+            SELECT p.cliente_id,
+                   SUM(p.monto) AS total_pagado,
+                   COUNT(p.id) AS cantidad_pagos
+            FROM pagos p
+            WHERE {sub_where_clause}
+            GROUP BY p.cliente_id
+        ) sub ON sub.cliente_id = c.id
+        WHERE c.activo = 1
+        ORDER BY total_pagado DESC
+    """, sub_params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def obtener_top_clientes_por_monto(limite=10, fecha_desde=None, fecha_hasta=None):
+    """Devuelve los clientes que más han pagado (por monto total),
+    con nombre, sexo, cantidad de pagos y monto total."""
+    conn = get_connection()
+    cur = conn.cursor()
+
+    query = """
+        SELECT c.id, c.nombre, c.sexo,
+               COUNT(p.id) as cantidad_pagos,
+               SUM(p.monto) as total_pagado
+        FROM pagos p
+        JOIN clientes c ON p.cliente_id = c.id
+        WHERE 1=1
+    """
+    params = []
+
+    if fecha_desde:
+        query += " AND p.fecha >= ?"
+        params.append(fecha_desde if isinstance(fecha_desde, str) else fecha_desde.isoformat())
+    if fecha_hasta:
+        query += " AND p.fecha <= ?"
+        params.append(fecha_hasta if isinstance(fecha_hasta, str) else fecha_hasta.isoformat())
+
+    query += " GROUP BY c.id ORDER BY total_pagado DESC LIMIT ?"
+    params.append(limite)
+
+    cur.execute(query, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def obtener_clientes_frecuentes(limite=10, fecha_desde=None, fecha_hasta=None):
+    """Devuelve los clientes con más pagos registrados (frecuencia),
+    con nombre, sexo, cantidad de pagos, monto total y último pago."""
+    conn = get_connection()
+    cur = conn.cursor()
+
+    query = """
+        SELECT c.id, c.nombre, c.sexo,
+               COUNT(p.id) as cantidad_pagos,
+               SUM(p.monto) as total_pagado,
+               MAX(p.fecha) as ultimo_pago
+        FROM pagos p
+        JOIN clientes c ON p.cliente_id = c.id
+        WHERE 1=1
+    """
+    params = []
+
+    if fecha_desde:
+        query += " AND p.fecha >= ?"
+        params.append(fecha_desde if isinstance(fecha_desde, str) else fecha_desde.isoformat())
+    if fecha_hasta:
+        query += " AND p.fecha <= ?"
+        params.append(fecha_hasta if isinstance(fecha_hasta, str) else fecha_hasta.isoformat())
+
+    query += " GROUP BY c.id ORDER BY cantidad_pagos DESC LIMIT ?"
+    params.append(limite)
+
+    cur.execute(query, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def obtener_clientes_inactivos(dias=60):
+    """Devuelve clientes que no han realizado ningún pago en los últimos `dias` días.
+    Útil para campañas de retención."""
+    conn = get_connection()
+    cur = conn.cursor()
+    fecha_corte = (date.today() - timedelta(days=dias)).isoformat()
+
+    cur.execute("""
+        SELECT c.id, c.nombre, c.sexo, MAX(p.fecha) as ultimo_pago
+        FROM clientes c
+        LEFT JOIN pagos p ON p.cliente_id = c.id
+        GROUP BY c.id
+        HAVING ultimo_pago IS NULL OR ultimo_pago < ?
+        ORDER BY ultimo_pago ASC
+    """, (fecha_corte,))
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def obtener_distribucion_membresias():
+    """Devuelve cuántos clientes tiene cada tipo/plan de membresía activa.
+    Útil para saber qué plan es más popular."""
+    from services.membresia_service import listar_membresias
+    from utils.constants import ESTADO_ACTIVA, ESTADO_POR_VENCER
+
+    todas = listar_membresias()
+    activas = [m for m in todas if m["estado"] in (ESTADO_ACTIVA, ESTADO_POR_VENCER)]
+
+    distribucion = {}
+    for m in activas:
+        tipo = m.get("tipo") or m.get("plan") or "Sin tipo"
+        distribucion[tipo] = distribucion.get(tipo, 0) + 1
+
+    return [{"tipo": k, "cantidad": v} for k, v in
+            sorted(distribucion.items(), key=lambda x: x[1], reverse=True)]
+
+
+# ─────────────────────────── REPORTE DIARIO ──────────────────────
+
+def exportar_excel_reporte_diario(fecha=None):
+    """Genera un reporte Excel del día:
+    - Hoja Resumen_Dia: métricas clave del día
+    - Hoja Ingresos_Dia: pagos del día
+    - Hoja Egresos_Dia: gastos del día
+    """
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        raise ImportError("openpyxl no está instalado. Ejecuta: pip install openpyxl")
+
+    if fecha is None:
+        fecha = date.today()
+    if isinstance(fecha, str):
+        fecha = date.fromisoformat(fecha)
+
+    REPORTES_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = REPORTES_DIR / f"Reporte_Diario_{fecha.isoformat()}.xlsx"
+
+    wb = Workbook()
+    if "Sheet" in wb.sheetnames:
+        del wb["Sheet"]
+
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center")
+
+    def _write_sheet(wb, nombre, headers, rows):
+        if nombre in wb.sheetnames:
+            del wb[nombre]
+        ws = wb.create_sheet(nombre)
+        for col, h in enumerate(headers, 1):
+            cell = ws.cell(1, col, h)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+        for ri, row in enumerate(rows, 2):
+            for ci, val in enumerate(row, 1):
+                ws.cell(ri, ci, val)
+        for col in range(1, len(headers) + 1):
+            ws.column_dimensions[get_column_letter(col)].width = 20
+
+    ingresos_dia = listar_ingresos(fecha_desde=fecha, fecha_hasta=fecha)
+    egresos_dia = listar_egresos(fecha_desde=fecha, fecha_hasta=fecha)
+    total_ing = sum(i["monto"] for i in ingresos_dia)
+    total_eg = sum(e["monto"] for e in egresos_dia)
+    clientes_activos_dia = len(set(i["cliente_id"] for i in ingresos_dia))
+    stats = obtener_estadisticas_clientes()
+
+    # Hoja Resumen_Dia
+    resumen_rows = [
+        ("Fecha", fecha.isoformat()),
+        ("Total ingresos del día", total_ing),
+        ("Total egresos del día", total_eg),
+        ("Utilidad del día", total_ing - total_eg),
+        ("Cantidad de pagos", len(ingresos_dia)),
+        ("Total clientes registrados", stats["total_clientes"]),
+        ("Clientes activos en el día", clientes_activos_dia),
+        ("Clientes con membresía activa", stats["con_membresia_activa"]),
+        ("Clientes con membresía vencida", stats["con_membresia_vencida"]),
+        ("Clientes sin membresía", stats["sin_membresia"]),
+        ("Promedio de gasto por cliente", stats["promedio_gasto_cliente"]),
+    ]
+    _write_sheet(wb, "Resumen_Dia", ["Concepto", "Valor"], resumen_rows)
+
+    # Hoja Ingresos_Dia
+    ing_rows = [(i["fecha"], i["cliente_nombre"], i["concepto"], i["metodo"], i["monto"])
+                for i in ingresos_dia]
+    if ing_rows:
+        ing_rows.append(("", "", "", "TOTAL", total_ing))
+    _write_sheet(wb, "Ingresos_Dia",
+                 ["Fecha", "Cliente", "Concepto", "Método", "Monto"], ing_rows)
+
+    # Hoja Egresos_Dia
+    eg_rows = [(e["fecha"], e["categoria"], e["descripcion"],
+                e["proveedor"], e["metodo"], e["monto"])
+               for e in egresos_dia]
+    if eg_rows:
+        eg_rows.append(("", "", "", "", "TOTAL", total_eg))
+    _write_sheet(wb, "Egresos_Dia",
+                 ["Fecha", "Categoría", "Descripción", "Proveedor", "Método", "Monto"], eg_rows)
+
+    wb.save(output_path)
+    return str(output_path)
+
+
+def exportar_pdf_reporte_diario(fecha=None):
+    """Genera un PDF con el resumen del día, ingresos, egresos y top clientes."""
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib import colors
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
+    except ImportError:
+        raise ImportError("reportlab no está instalado. Ejecuta: pip install reportlab")
+
+    if fecha is None:
+        fecha = date.today()
+    if isinstance(fecha, str):
+        fecha = date.fromisoformat(fecha)
+
+    REPORTES_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = REPORTES_DIR / f"Reporte_Diario_{fecha.isoformat()}.pdf"
+
+    doc = SimpleDocTemplate(str(output_path), pagesize=letter,
+                            rightMargin=0.5 * inch, leftMargin=0.5 * inch,
+                            topMargin=0.75 * inch, bottomMargin=0.75 * inch)
+    styles = getSampleStyleSheet()
+    story = []
+
+    AZUL = colors.HexColor("#4472C4")
+    BLANCO = colors.white
+    GRIS = colors.HexColor("#f2f2f2")
+
+    def _tabla_pdf(headers, rows, col_widths=None):
+        data = [headers] + rows
+        t = Table(data, colWidths=col_widths)
+        t.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), AZUL),
+            ("TEXTCOLOR", (0, 0), (-1, 0), BLANCO),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [BLANCO, GRIS]),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("PADDING", (0, 0), (-1, -1), 4),
+        ]))
+        return t
+
+    story.append(Paragraph(f"<b>KyoGym — Reporte Diario {fecha.isoformat()}</b>",
+                            styles["Title"]))
+    story.append(Spacer(1, 0.2 * inch))
+
+    ingresos_dia = listar_ingresos(fecha_desde=fecha, fecha_hasta=fecha)
+    egresos_dia = listar_egresos(fecha_desde=fecha, fecha_hasta=fecha)
+    total_ing = sum(i["monto"] for i in ingresos_dia)
+    total_eg = sum(e["monto"] for e in egresos_dia)
+    clientes_activos_dia = len(set(i["cliente_id"] for i in ingresos_dia))
+    stats = obtener_estadisticas_clientes()
+
+    # Resumen del día
+    story.append(Paragraph("<b>Resumen del día</b>", styles["Heading2"]))
+    res_rows = [
+        ["Ingresos del día", f"${total_ing:,.2f}"],
+        ["Egresos del día", f"${total_eg:,.2f}"],
+        ["Utilidad del día", f"${total_ing - total_eg:,.2f}"],
+        ["Pagos registrados", str(len(ingresos_dia))],
+        ["Total clientes", str(stats["total_clientes"])],
+        ["Clientes activos en el día", str(clientes_activos_dia)],
+        ["Con membresía activa", str(stats["con_membresia_activa"])],
+        ["Con membresía vencida", str(stats["con_membresia_vencida"])],
+        ["Sin membresía", str(stats["sin_membresia"])],
+    ]
+    story.append(_tabla_pdf(["Concepto", "Valor"], res_rows, [3 * inch, 2 * inch]))
+    story.append(Spacer(1, 0.25 * inch))
+
+    # Ingresos del día
+    story.append(Paragraph("<b>Ingresos del día</b>", styles["Heading2"]))
+    if ingresos_dia:
+        ing_rows = [(i["fecha"], i["cliente_nombre"][:20], i["concepto"][:18],
+                     i["metodo"], f"${i['monto']:,.2f}") for i in ingresos_dia]
+        ing_rows.append(("", "", "", "TOTAL", f"${total_ing:,.2f}"))
+        story.append(_tabla_pdf(["Fecha", "Cliente", "Concepto", "Método", "Monto"],
+                                ing_rows,
+                                [1 * inch, 1.8 * inch, 1.8 * inch, 1 * inch, 1 * inch]))
+    else:
+        story.append(Paragraph("Sin ingresos hoy.", styles["Normal"]))
+
+    doc.build(story)
+    return str(output_path)

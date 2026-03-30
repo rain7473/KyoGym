@@ -4,6 +4,23 @@ from db import get_connection
 from services.inventario_service import vender_producto
 
 
+def _auto_asistencia(cliente_id, fecha_pago):
+    """Auto-registra asistencia en la fecha del pago si no existe ya.
+    Se activa solo cuando el cliente tiene alguna membersía registrada."""
+    try:
+        from db import get_connection as _gc
+        conn = _gc()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) as cnt FROM membresias WHERE cliente_id=?", (cliente_id,))
+        tiene = cur.fetchone()["cnt"] > 0
+        conn.close()
+        if tiene:
+            from services.asistencia_service import registrar_asistencia_si_no_existe
+            registrar_asistencia_si_no_existe(cliente_id, fecha=fecha_pago, origen="pago")
+    except Exception:
+        pass  # No bloquear el flujo principal
+
+
 def crear_pago(cliente_id, monto, metodo, fecha_pago=None, concepto="", producto_id=None, cantidad=1):
     """Registra un nuevo pago y descuenta inventario si es producto"""
 
@@ -46,6 +63,7 @@ def crear_pago(cliente_id, monto, metodo, fecha_pago=None, concepto="", producto
     pago_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _auto_asistencia(cliente_id, fecha_pago)
     return True, pago_id
 
 
@@ -90,6 +108,7 @@ def crear_pago_multiple(cliente_id, monto, metodo, items, concepto="", fecha_pag
     pago_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    _auto_asistencia(cliente_id, fecha_pago)
     return True, pago_id
 
 

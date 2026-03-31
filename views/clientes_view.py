@@ -299,14 +299,14 @@ class ClientesView(QWidget):
         self.buscar_input.setStyleSheet("""
             QLineEdit {
                 padding: 8px 10px;
-                border: 1px solid #d0d0d0;
+                border: none;
                 border-radius: 5px;
                 font-size: 13px;
                 color: #2c2c2c;
                 background-color: #f5f5f5;
             }
             QLineEdit:focus {
-                border: 2px solid #c0c0c0;
+                border: 1px solid #c0c0c0;
             }
         """)
         self.buscar_input.textChanged.connect(self.cargar_datos)
@@ -336,11 +336,11 @@ class ClientesView(QWidget):
         # ── Tabs ─────────────────────────────────────
         self.tabs_clientes = QTabWidget()
         self.tabs_clientes.setStyleSheet("""
-            QTabWidget::pane { border:1px solid #d0d0d0; border-radius:4px; background:#f8f8f8; }
+            QTabWidget::pane { border: none; border-radius:4px; background:#f8f8f8; }
             QTabBar::tab {
                 padding:8px 18px; font-size:13px; font-weight:bold;
                 color:#555555; background:#eeeeee;
-                border:1px solid #d0d0d0; border-bottom:none; border-radius:4px 4px 0 0;
+                border: none; border-bottom:none; border-radius:4px 4px 0 0;
             }
             QTabBar::tab:selected { background:#f8f8f8; color:#1a1a1a; border-bottom:1px solid #f8f8f8; }
             QTabBar::tab:hover { background:#e0e0e0; }
@@ -498,7 +498,7 @@ class ClientesView(QWidget):
 
         def _card_stat(titulo, color="#2c6fad"):
             frame = QFrame()
-            frame.setStyleSheet("QFrame { background:#ffffff; border:1px solid #e0e0e0; border-radius:8px; }")
+            frame.setStyleSheet("QFrame { background:#ffffff; border: none; border-radius:8px; }")
             fl = QVBoxLayout(frame)
             fl.setContentsMargins(16, 14, 16, 14)
             fl.setSpacing(4)
@@ -569,7 +569,7 @@ class ClientesView(QWidget):
             "Todo el tiempo", "Hoy", "Esta semana", "Este mes", "Este año", "Período personalizado"
         ])
         self.combo_top_periodo.setStyleSheet("""
-            QComboBox { padding:6px 10px; border:1px solid #d0d0d0; border-radius:4px;
+            QComboBox { padding:6px 10px; border: none; border-radius:4px;
                         font-size:12px; color:#1a1a1a; background:#f5f5f5; min-width:150px; }
             QComboBox::drop-down { border:none; }
         """)
@@ -586,7 +586,7 @@ class ClientesView(QWidget):
         self.date_top_desde.setDisplayFormat("dd/MM/yyyy")
         self.date_top_desde.setDate(QDate.currentDate().addMonths(-1))
         self.date_top_desde.setStyleSheet("""
-            QDateEdit { padding:6px; border:1px solid #d0d0d0; border-radius:4px;
+            QDateEdit { padding:6px; border: none; border-radius:4px;
                         font-size:12px; color:#1a1a1a; background:#f5f5f5; }
         """)
         ctrl.addWidget(self.date_top_desde)
@@ -601,7 +601,7 @@ class ClientesView(QWidget):
         self.date_top_hasta.setDisplayFormat("dd/MM/yyyy")
         self.date_top_hasta.setDate(QDate.currentDate())
         self.date_top_hasta.setStyleSheet("""
-            QDateEdit { padding:6px; border:1px solid #d0d0d0; border-radius:4px;
+            QDateEdit { padding:6px; border: none; border-radius:4px;
                         font-size:12px; color:#1a1a1a; background:#f5f5f5; }
         """)
         ctrl.addWidget(self.date_top_hasta)
@@ -715,7 +715,7 @@ class ClientesView(QWidget):
         self.input_dias_inactivo = QLineEdit("60")
         self.input_dias_inactivo.setMaximumWidth(55)
         self.input_dias_inactivo.setStyleSheet("""
-            QLineEdit { padding:6px; border:1px solid #d0d0d0; border-radius:4px;
+            QLineEdit { padding:6px; border: none; border-radius:4px;
                         font-size:12px; color:#1a1a1a; background:#f5f5f5; }
         """)
         ctrl.addWidget(self.input_dias_inactivo)

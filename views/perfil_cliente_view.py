@@ -32,7 +32,7 @@ _COLOR_BORDE     = "#e0e0e0"
 _COLOR_TEXT_PRI  = "#1a1a1a"
 _COLOR_TEXT_SEC  = "#666666"
 _ASIST_FILL      = QColor(39, 174, 96, 160)    # verde semitransparente
-_PAGO_INDICATOR  = QColor(44, 111, 173, 200)   # azul para pagos
+_PAGO_INDICATOR  = QColor(100, 100, 100, 200)   # gris para pagos
 _TODAY_RING      = QColor(52, 73, 94)
 
 
@@ -106,8 +106,15 @@ class CalendarioAsistencia(QCalendarWidget):
                 color: #1a1a1a;
                 font-size: 12px;
             }
+            QCalendarWidget QHeaderView::section {
+                background-color: #4a6576;
+                color: #f3f5f7;
+                border: none;
+                font-weight: bold;
+                padding: 2px;
+            }
             QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #2c3e50;
+                background-color: #3b5264;
                 padding: 4px;
             }
             QCalendarWidget QToolButton {
@@ -119,12 +126,12 @@ class CalendarioAsistencia(QCalendarWidget):
                 padding: 4px 8px;
             }
             QCalendarWidget QToolButton:hover {
-                background-color: #3d5166;
+                background-color: #4b6576;
                 border-radius: 4px;
             }
             QCalendarWidget QSpinBox {
                 color: #ffffff;
-                background-color: #2c3e50;
+                background-color: #3b5264;
                 font-size: 13px;
                 border: none;
             }
@@ -255,7 +262,7 @@ class MiniCard(QFrame):
         self.setFixedHeight(88)
         self.setStyleSheet(f"""
             QFrame {{
-                background:{_COLOR_CARD}; border:1px solid {_COLOR_BORDE};
+                background:{_COLOR_CARD}; border: none;
                 border-radius:8px;
             }}
         """)
@@ -306,6 +313,7 @@ class PerfilClienteDialog(QDialog):
         self.setWindowTitle("Perfil de Cliente")
         self.setMinimumSize(1100, 750)
         self.resize(1200, 820)
+        self.showMaximized()
         self.setStyleSheet(f"QDialog {{ background:{_COLOR_FONDO}; }}")
 
         self._resumen = {}
@@ -468,7 +476,7 @@ class PerfilClienteDialog(QDialog):
             chip.setWordWrap(True)
             chip.setStyleSheet(f"""
                 QLabel {{
-                    background:{bg}; border:1px solid {borde}; border-radius:6px;
+                    background:{bg}; border: none; border-radius:6px;
                     color:#333333; font-size:12px; padding:6px 10px;
                 }}
             """)
@@ -488,14 +496,13 @@ class PerfilClienteDialog(QDialog):
 
         self._card_asist_mes   = MiniCard("Asistencias este mes", "—", _COLOR_ACTIVA, "📅")
         self._card_asist_ant   = MiniCard("Asistencias mes pasado", "—", _COLOR_TEXT_SEC, "📆")
-        self._card_promedio    = MiniCard("Promedio mensual", "—", _COLOR_MORADO, "📊")
         self._card_dias_sin    = MiniCard("Días sin asistir", "—", _COLOR_VENCER, "⏳")
         self._card_ult_pago    = MiniCard("Último pago", "—", _COLOR_AZUL, "💳")
         self._card_total_pago  = MiniCard("Total pagado", "—", _COLOR_MORADO, "💰")
         self._card_total_asis  = MiniCard("Total asistencias", "—", _COLOR_ACTIVA, "🏋️")
         self._card_racha       = MiniCard("Racha actual", "—", _COLOR_ACTIVA, "🔥")
 
-        for c in [self._card_asist_mes, self._card_asist_ant, self._card_promedio,
+        for c in [self._card_asist_mes, self._card_asist_ant,
                   self._card_dias_sin, self._card_ult_pago, self._card_total_pago,
                   self._card_total_asis, self._card_racha]:
             lay.addWidget(c)
@@ -507,7 +514,7 @@ class PerfilClienteDialog(QDialog):
     def _build_calendario_section(self):
         frame = QFrame()
         frame.setStyleSheet(f"""
-            QFrame {{ background:{_COLOR_CARD}; border:1px solid {_COLOR_BORDE};
+            QFrame {{ background:{_COLOR_CARD}; border: none;
                       border-radius:8px; }}
         """)
         lay = QVBoxLayout(frame)
@@ -555,7 +562,7 @@ class PerfilClienteDialog(QDialog):
     def _build_asistencias_section(self):
         frame = QFrame()
         frame.setStyleSheet(f"""
-            QFrame {{ background:{_COLOR_CARD}; border:1px solid {_COLOR_BORDE};
+            QFrame {{ background:{_COLOR_CARD}; border: none;
                       border-radius:8px; }}
         """)
         lay = QVBoxLayout(frame)
@@ -597,7 +604,7 @@ class PerfilClienteDialog(QDialog):
     def _build_pagos_section(self):
         frame = QFrame()
         frame.setStyleSheet(f"""
-            QFrame {{ background:{_COLOR_CARD}; border:1px solid {_COLOR_BORDE};
+            QFrame {{ background:{_COLOR_CARD}; border: none;
                       border-radius:8px; }}
         """)
         lay = QVBoxLayout(frame)
@@ -698,7 +705,6 @@ class PerfilClienteDialog(QDialog):
         r = self._resumen
         self._card_asist_mes.set_valor(r.get("asist_este_mes", 0))
         self._card_asist_ant.set_valor(r.get("asist_mes_pasado", 0))
-        self._card_promedio.set_valor(r.get("promedio_mensual", 0))
 
         dias_sin = r.get("dias_sin_asistir")
         self._card_dias_sin.set_valor("—" if dias_sin is None else dias_sin)
@@ -894,7 +900,7 @@ def _stat_label(titulo, valor, color_val=None):
     """Crea un QFrame con título y valor. Devuelve el frame."""
     frame = QFrame()
     frame.setStyleSheet(f"""
-        QFrame {{ background:#f8f8f8; border:1px solid {_COLOR_BORDE};
+        QFrame {{ background:#f8f8f8; border: none;
                   border-radius:6px; }}
     """)
     lay = QVBoxLayout(frame)

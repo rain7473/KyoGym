@@ -23,7 +23,7 @@ from utils.validators import crear_validador_numerico_decimal
 
 _ESTILO_DATE = """
     QDateEdit {
-        padding: 6px 10px; border: 1px solid #d0d0d0; border-radius: 4px;
+        padding: 6px 10px; border: none; border-radius: 4px;
         background-color: #f5f5f5; font-size: 12px; color: #2c2c2c; min-width: 120px;
     }
     QDateEdit:focus { border: 2px solid #c0c0c0; }
@@ -85,7 +85,7 @@ def _card(titulo, valor, color="#2c6fad"):
     frame.setStyleSheet(f"""
         QFrame {{
             background-color: #ffffff;
-            border: 1px solid #e0e0e0;
+            border: none;
             border-radius: 8px;
         }}
     """)
@@ -171,11 +171,11 @@ class FinanzasView(QWidget):
 
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #d0d0d0; border-radius:4px; background:#f8f8f8; }
+            QTabWidget::pane { border: none; border-radius:4px; background:#f8f8f8; }
             QTabBar::tab {
                 padding: 10px 20px; font-size:13px; font-weight:bold;
                 color:#555555; background:#eeeeee;
-                border:1px solid #d0d0d0; border-bottom:none; border-radius:4px 4px 0 0;
+                border:none; border-bottom:none; border-radius:4px 4px 0 0;
             }
             QTabBar::tab:selected { background:#f8f8f8; color:#1a1a1a; border-bottom:1px solid #f8f8f8; }
             QTabBar::tab:hover { background:#e0e0e0; }
@@ -213,7 +213,7 @@ class FinanzasView(QWidget):
         # ── Gráfico Ingresos vs Egresos ──────────────────────────────
         chart_frame = QFrame()
         chart_frame.setStyleSheet(
-            "QFrame { background:#ffffff; border:1px solid #e0e0e0; border-radius:8px; }"
+            "QFrame { background:#ffffff; border:none; border-radius:8px; }"
         )
         chart_frame_layout = QVBoxLayout(chart_frame)
         chart_frame_layout.setContentsMargins(12, 10, 12, 10)
@@ -265,7 +265,7 @@ class FinanzasView(QWidget):
         self._chart_spin_año.setRange(2020, date.today().year)
         self._chart_spin_año.setValue(date.today().year)
         self._chart_spin_año.setStyleSheet(
-            "QSpinBox { padding:4px 6px; border:1px solid #d0d0d0; border-radius:4px;"
+            "QSpinBox { padding:4px 6px; border:none; border-radius:4px;"
             " background:#f5f5f5; color:#1a1a1a; font-size:12px; min-width:60px; }"
         )
         self._chart_spin_año.valueChanged.connect(lambda _: self._actualizar_grafico())
@@ -378,7 +378,7 @@ class FinanzasView(QWidget):
         self.ing_buscar.setPlaceholderText("Buscar cliente...")
         self.ing_buscar.setClearButtonEnabled(True)
         self.ing_buscar.setStyleSheet("""
-            QLineEdit { padding:8px 10px; border:1px solid #d0d0d0; border-radius:5px;
+            QLineEdit { padding:8px 10px; border:none; border-radius:5px;
                         background:#f5f5f5; font-size:13px; color:#2c2c2c; }
             QLineEdit:focus { border:2px solid #c0c0c0; }
         """)
@@ -414,7 +414,7 @@ class FinanzasView(QWidget):
         # Formulario de registro
         form_frame = QFrame()
         form_frame.setStyleSheet("""
-            QFrame { background:#ffffff; border:1px solid #e0e0e0; border-radius:8px; }
+            QFrame { background:#ffffff; border:none; border-radius:8px; }
             QLabel { border:none; background:transparent; color:#2c2c2c; font-size:13px; }
         """)
         form_layout = QFormLayout(form_frame)

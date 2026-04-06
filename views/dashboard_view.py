@@ -923,10 +923,16 @@ class DashboardView(QWidget):
                 if date.fromisoformat(m['fecha_inicio']) <= self.filtro_fecha_hasta
                 and date.fromisoformat(m['fecha_vencimiento']) >= self.filtro_fecha_desde
             ]
+            # Clientes con activa/por_vencer dentro del rango filtrado
+            clientes_con_activa = {m['cliente_id'] for m in filtradas
+                                   if m['estado'] in (ESTADO_ACTIVA, ESTADO_POR_VENCER)}
             conteo = {ESTADO_ACTIVA: 0, ESTADO_POR_VENCER: 0, ESTADO_VENCIDA: 0}
             for m in filtradas:
                 est = m['estado']
                 if est in conteo:
+                    # No contar vencidas de clientes que ya tienen membresía activa
+                    if est == ESTADO_VENCIDA and m['cliente_id'] in clientes_con_activa:
+                        continue
                     conteo[est] += 1
         else:
             conteo = membresia_service.contar_membresias_por_estado()

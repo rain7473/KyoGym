@@ -467,11 +467,11 @@ def obtener_estadisticas_clientes():
     conn.close()
 
     todas = listar_membresias()
-    ids_con_membresia = set(m["cliente_id"] for m in todas)
 
     activas = sum(1 for m in todas if m["estado"] in (ESTADO_ACTIVA, ESTADO_POR_VENCER))
     vencidas = sum(1 for m in todas if m["estado"] == ESTADO_VENCIDA)
-    sin_membresia = total - len(ids_con_membresia)
+    # Sin membresía = clientes sin membresía activa (incluye vencidas y sin registrar)
+    sin_membresia = total - activas
 
     conn = get_connection()
     cur = conn.cursor()
@@ -566,30 +566,29 @@ def obtener_top_clientes_por_monto(limite=10, fecha_desde=None, fecha_hasta=None
 
 
 def obtener_clientes_frecuentes(limite=10, fecha_desde=None, fecha_hasta=None):
-    """Devuelve los clientes con más pagos registrados (frecuencia),
-    con nombre, sexo, cantidad de pagos, monto total y último pago."""
+    """Devuelve los clientes con más asistencias registradas (frecuencia de visita),
+    con nombre, sexo, cantidad de asistencias y última asistencia."""
     conn = get_connection()
     cur = conn.cursor()
 
     query = """
         SELECT c.id, c.nombre, c.sexo,
-               COUNT(p.id) as cantidad_pagos,
-               SUM(p.monto) as total_pagado,
-               MAX(p.fecha) as ultimo_pago
-        FROM pagos p
-        JOIN clientes c ON p.cliente_id = c.id
+               COUNT(a.id) as cantidad_asistencias,
+               MAX(a.fecha) as ultima_asistencia
+        FROM asistencias a
+        JOIN clientes c ON a.cliente_id = c.id
         WHERE 1=1
     """
     params = []
 
     if fecha_desde:
-        query += " AND p.fecha >= ?"
+        query += " AND a.fecha >= ?"
         params.append(fecha_desde if isinstance(fecha_desde, str) else fecha_desde.isoformat())
     if fecha_hasta:
-        query += " AND p.fecha <= ?"
+        query += " AND a.fecha <= ?"
         params.append(fecha_hasta if isinstance(fecha_hasta, str) else fecha_hasta.isoformat())
 
-    query += " GROUP BY c.id ORDER BY cantidad_pagos DESC LIMIT ?"
+    query += " GROUP BY c.id ORDER BY cantidad_asistencias DESC LIMIT ?"
     params.append(limite)
 
     cur.execute(query, params)
@@ -599,21 +598,32 @@ def obtener_clientes_frecuentes(limite=10, fecha_desde=None, fecha_hasta=None):
 
 
 def obtener_clientes_inactivos(dias=60):
-    """Devuelve clientes que no han realizado ningún pago en los últimos `dias` días.
-    Útil para campañas de retención."""
+    """Devuelve clientes que no han asistido en los últimos `dias` días.
+    Retorna nombre, sexo, última asistencia y días exactos transcurridos."""
     conn = get_connection()
     cur = conn.cursor()
     fecha_corte = (date.today() - timedelta(days=dias)).isoformat()
 
     cur.execute("""
-        SELECT c.id, c.nombre, c.sexo, MAX(p.fecha) as ultimo_pago
+        SELECT c.id, c.nombre, c.sexo, MAX(a.fecha) as ultima_asistencia
         FROM clientes c
-        LEFT JOIN pagos p ON p.cliente_id = c.id
+        LEFT JOIN asistencias a ON a.cliente_id = c.id
+        WHERE c.activo = 1
         GROUP BY c.id
-        HAVING ultimo_pago IS NULL OR ultimo_pago < ?
-        ORDER BY ultimo_pago ASC
+        HAVING ultima_asistencia IS NULL OR ultima_asistencia < ?
+        ORDER BY ultima_asistencia ASC
     """, (fecha_corte,))
-    rows = [dict(r) for r in cur.fetchall()]
+
+    hoy_date = date.today()
+    rows = []
+    for r in cur.fetchall():
+        d = dict(r)
+        if d["ultima_asistencia"]:
+            ultima = date.fromisoformat(d["ultima_asistencia"])
+            d["dias_inactivo"] = (hoy_date - ultima).days
+        else:
+            d["dias_inactivo"] = None
+        rows.append(d)
     conn.close()
     return rows
 

@@ -153,18 +153,28 @@ def renovar_membresia(cliente_id, monto=0.0):
 
 
 def contar_membresias_por_estado():
-    """Cuenta membresías agrupadas por estado"""
+    """Cuenta membresías agrupadas por estado.
+    Las membresías vencidas de clientes que ya tienen una membresía activa
+    o por vencer no se cuentan en el total de Vencidas."""
     membresias = listar_membresias()
-    
+
+    # Clientes con al menos una membresía activa o por vencer
+    clientes_con_activa = {m['cliente_id'] for m in membresias
+                           if m['estado'] in (ESTADO_ACTIVA, ESTADO_POR_VENCER)}
+
     conteo = {
         ESTADO_ACTIVA: 0,
         ESTADO_POR_VENCER: 0,
         ESTADO_VENCIDA: 0
     }
-    
+
     for membresia in membresias:
-        conteo[membresia['estado']] += 1
-    
+        estado = membresia['estado']
+        # No contar membresías vencidas si el cliente ya tiene una activa/por vencer
+        if estado == ESTADO_VENCIDA and membresia['cliente_id'] in clientes_con_activa:
+            continue
+        conteo[estado] += 1
+
     return conteo
 
 

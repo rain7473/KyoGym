@@ -636,6 +636,34 @@ class ClientesView(QWidget):
         for w2 in [self.lbl_top_desde, self.date_top_desde, self.lbl_top_hasta, self.date_top_hasta]:
             w2.setVisible(es_personalizado)
 
+    def _on_frecuentes_periodo_changed(self, index):
+        """Muestra/oculta los DateEdits de frecuentes según el período seleccionado"""
+        es_personalizado = (self.combo_frecuentes_periodo.currentText() == "Período personalizado")
+        for w2 in [self.lbl_frecuentes_desde, self.date_frecuentes_desde,
+                   self.lbl_frecuentes_hasta, self.date_frecuentes_hasta]:
+            w2.setVisible(es_personalizado)
+
+    def _calcular_rango_frecuentes(self):
+        """Devuelve (fecha_desde_str, fecha_hasta_str) según el filtro de frecuentes"""
+        from datetime import date, timedelta
+        hoy = date.today()
+        texto = self.combo_frecuentes_periodo.currentText()
+        if texto == "Hoy":
+            return hoy.isoformat(), hoy.isoformat()
+        elif texto == "Esta semana":
+            lunes = hoy - timedelta(days=hoy.weekday())
+            return lunes.isoformat(), hoy.isoformat()
+        elif texto == "Este mes":
+            return hoy.replace(day=1).isoformat(), hoy.isoformat()
+        elif texto == "Este año":
+            return hoy.replace(month=1, day=1).isoformat(), hoy.isoformat()
+        elif texto == "Período personalizado":
+            d = self.date_frecuentes_desde.date()
+            h = self.date_frecuentes_hasta.date()
+            return date(d.year(), d.month(), d.day()).isoformat(), date(h.year(), h.month(), h.day()).isoformat()
+        else:  # Todo el tiempo
+            return None, None
+
     def _calcular_rango_top(self):
         """Devuelve (fecha_desde_str, fecha_hasta_str) según el filtro seleccionado"""
         from datetime import date, timedelta
@@ -663,6 +691,10 @@ class ClientesView(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(10)
 
+        # ── Fila de controles ───────────────────────────
+        ctrl = QHBoxLayout()
+        ctrl.setSpacing(10)
+
         btn_refresh = QPushButton("🔄 Actualizar")
         btn_refresh.setStyleSheet("""
             QPushButton { background-color:#3498db; color:white; padding:6px 16px;
@@ -670,16 +702,68 @@ class ClientesView(QWidget):
             QPushButton:hover { background-color:#2980b9; }
         """)
         btn_refresh.clicked.connect(self._cargar_tab_frecuentes)
-        layout.addWidget(btn_refresh, alignment=Qt.AlignLeft)
+        ctrl.addWidget(btn_refresh)
 
-        lbl = QLabel("Clientes con más pagos registrados (frecuencia de visita)")
+        lbl_filtro = QLabel("Período:")
+        lbl_filtro.setStyleSheet("color:#555; font-size:12px; font-weight:bold;")
+        ctrl.addWidget(lbl_filtro)
+
+        self.combo_frecuentes_periodo = QComboBox()
+        self.combo_frecuentes_periodo.addItems([
+            "Todo el tiempo", "Hoy", "Esta semana", "Este mes", "Este año", "Período personalizado"
+        ])
+        self.combo_frecuentes_periodo.setStyleSheet("""
+            QComboBox { padding:6px 10px; border: none; border-radius:4px;
+                        font-size:12px; color:#1a1a1a; background:#f5f5f5; min-width:150px; }
+            QComboBox::drop-down { border:none; }
+        """)
+        self.combo_frecuentes_periodo.currentIndexChanged.connect(self._on_frecuentes_periodo_changed)
+        ctrl.addWidget(self.combo_frecuentes_periodo)
+
+        lbl_desde_f = QLabel("Desde:")
+        lbl_desde_f.setStyleSheet("color:#555; font-size:12px;")
+        self.lbl_frecuentes_desde = lbl_desde_f
+        ctrl.addWidget(lbl_desde_f)
+
+        self.date_frecuentes_desde = QDateEdit()
+        self.date_frecuentes_desde.setCalendarPopup(True)
+        self.date_frecuentes_desde.setDisplayFormat("dd/MM/yyyy")
+        self.date_frecuentes_desde.setDate(QDate.currentDate().addMonths(-1))
+        self.date_frecuentes_desde.setStyleSheet("""
+            QDateEdit { padding:6px; border: none; border-radius:4px;
+                        font-size:12px; color:#1a1a1a; background:#f5f5f5; }
+        """)
+        ctrl.addWidget(self.date_frecuentes_desde)
+
+        lbl_hasta_f = QLabel("Hasta:")
+        lbl_hasta_f.setStyleSheet("color:#555; font-size:12px;")
+        self.lbl_frecuentes_hasta = lbl_hasta_f
+        ctrl.addWidget(lbl_hasta_f)
+
+        self.date_frecuentes_hasta = QDateEdit()
+        self.date_frecuentes_hasta.setCalendarPopup(True)
+        self.date_frecuentes_hasta.setDisplayFormat("dd/MM/yyyy")
+        self.date_frecuentes_hasta.setDate(QDate.currentDate())
+        self.date_frecuentes_hasta.setStyleSheet("""
+            QDateEdit { padding:6px; border: none; border-radius:4px;
+                        font-size:12px; color:#1a1a1a; background:#f5f5f5; }
+        """)
+        ctrl.addWidget(self.date_frecuentes_hasta)
+
+        for w2 in [lbl_desde_f, self.date_frecuentes_desde, lbl_hasta_f, self.date_frecuentes_hasta]:
+            w2.setVisible(False)
+
+        ctrl.addStretch()
+        layout.addLayout(ctrl)
+
+        lbl = QLabel("Clientes con más asistencias registradas (frecuencia de visita)")
         lbl.setStyleSheet("color:#555; font-size:12px; padding-bottom:4px;")
         layout.addWidget(lbl)
 
         self.tabla_frecuentes = QTableWidget()
-        self.tabla_frecuentes.setColumnCount(6)
+        self.tabla_frecuentes.setColumnCount(5)
         self.tabla_frecuentes.setHorizontalHeaderLabels(
-            ["#", "Cliente", "Género", "Cant. Pagos", "Total Pagado", "Último Pago"])
+            ["#", "Cliente", "Género", "Asistencias", "Última Asistencia"])
         self.tabla_frecuentes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabla_frecuentes.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabla_frecuentes.setSelectionMode(QTableWidget.NoSelection)
@@ -708,7 +792,7 @@ class ClientesView(QWidget):
         btn_refresh.clicked.connect(self._cargar_tab_inactivos)
         ctrl.addWidget(btn_refresh)
 
-        lbl_dias = QLabel("Sin pago hace más de:")
+        lbl_dias = QLabel("Sin asistencia hace más de:")
         lbl_dias.setStyleSheet("color:#555; font-size:12px;")
         ctrl.addWidget(lbl_dias)
 
@@ -726,14 +810,14 @@ class ClientesView(QWidget):
         ctrl.addStretch()
         layout.addLayout(ctrl)
 
-        lbl = QLabel("Clientes que no han realizado ningún pago en el período indicado.")
+        lbl = QLabel("Clientes que no han asistido en el período indicado.")
         lbl.setStyleSheet("color:#555; font-size:12px; padding-bottom:4px;")
         layout.addWidget(lbl)
 
         self.tabla_inactivos = QTableWidget()
         self.tabla_inactivos.setColumnCount(4)
         self.tabla_inactivos.setHorizontalHeaderLabels(
-            ["Cliente", "Género", "Último Pago", "Estado"])
+            ["Cliente", "Género", "Última Asistencia", "Estado"])
         self.tabla_inactivos.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabla_inactivos.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabla_inactivos.setSelectionMode(QTableWidget.NoSelection)
@@ -814,18 +898,19 @@ class ClientesView(QWidget):
 
     def _cargar_tab_frecuentes(self):
         try:
-            frec = finanzas_service.obtener_clientes_frecuentes(limite=20)
+            fecha_desde, fecha_hasta = self._calcular_rango_frecuentes()
+            frec = finanzas_service.obtener_clientes_frecuentes(
+                limite=20, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
             limpiar_tabla(self.tabla_frecuentes)
             self.tabla_frecuentes.setRowCount(len(frec))
             for i, c in enumerate(frec):
                 self.tabla_frecuentes.setRowHeight(i, 44)
                 vals = [str(i + 1), c["nombre"], c["sexo"] or "-",
-                        str(c["cantidad_pagos"]), f"${c['total_pagado']:,.2f}",
-                        c["ultimo_pago"] or "—"]
+                        str(c["cantidad_asistencias"]),
+                        c["ultima_asistencia"] or "—"]
                 for col, val in enumerate(vals):
                     item = QTableWidgetItem(val)
-                    item.setForeground(QColor("#2c6fad" if col == 3 else
-                                             "#27ae60" if col == 4 else "#1a1a1a"))
+                    item.setForeground(QColor("#2c6fad" if col == 3 else "#1a1a1a"))
                     self.tabla_frecuentes.setItem(i, col, item)
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
@@ -839,9 +924,12 @@ class ClientesView(QWidget):
             self.tabla_inactivos.setRowCount(len(inactivos))
             for i, c in enumerate(inactivos):
                 self.tabla_inactivos.setRowHeight(i, 44)
-                ultimo = c["ultimo_pago"] or "Nunca"
-                estado = "Sin pagos" if not c["ultimo_pago"] else f"Inactivo +{dias}d"
-                vals = [c["nombre"], c["sexo"] or "-", ultimo, estado]
+                ultima = c["ultima_asistencia"] or "Nunca"
+                if c["dias_inactivo"] is None:
+                    estado = "Nunca asistió"
+                else:
+                    estado = f"Hace {c['dias_inactivo']} días"
+                vals = [c["nombre"], c["sexo"] or "-", ultima, estado]
                 for col, val in enumerate(vals):
                     item = QTableWidgetItem(val)
                     item.setForeground(QColor("#e74c3c" if col == 3 else "#1a1a1a"))

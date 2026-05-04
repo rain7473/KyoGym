@@ -1,10 +1,17 @@
 """Vista del Dashboard con métricas, filtros por fecha, reloj y exportar PDF"""
+import os
+os.environ.setdefault("QT_API", "pyside6")
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QFrame, QTableWidget, QTableWidgetItem, QHeaderView,
                                QLineEdit, QPushButton, QDateEdit, QMessageBox,
                                QFileDialog)
 from PySide6.QtCore import Qt, QTimer, QRect, QDate, QThread, Signal
 from PySide6.QtGui import QFont, QPainter, QColor, QPen, QBrush, QPixmap
+try:
+    import qtawesome as qta
+    _QTA_OK = True
+except Exception:
+    _QTA_OK = False
 from services import membresia_service, pago_service, cliente_service
 from utils.constants import ESTADO_ACTIVA, ESTADO_POR_VENCER, ESTADO_VENCIDA
 from utils.table_styles import aplicar_estilo_tabla_moderna
@@ -56,17 +63,41 @@ class StatCard(QFrame):
         layout.setSpacing(10)
         
         # Icono en círculo a la izquierda
-        icon_label = QLabel(icon)
-        icon_label.setFixedSize(50, 50)
+        icon_label = QLabel()
+        icon_label.setFixedSize(54, 54)
         icon_label.setAlignment(Qt.AlignCenter)
         icon_label.setStyleSheet(f"""
             QLabel {{
                 background-color: {color};
-                border-radius: 25px;
-                font-size: 24px;
+                border-radius: 27px;
                 border: none;
             }}
         """)
+        if _QTA_OK:
+            try:
+                qta_icon = qta.icon(icon, color="white", scale_factor=1.0)
+                pix = qta_icon.pixmap(28, 28)
+                icon_label.setPixmap(pix)
+            except Exception:
+                icon_label.setText(icon)
+                icon_label.setStyleSheet(f"""
+                    QLabel {{
+                        background-color: {color};
+                        border-radius: 27px;
+                        font-size: 22px;
+                        border: none;
+                    }}
+                """)
+        else:
+            icon_label.setText(icon)
+            icon_label.setStyleSheet(f"""
+                QLabel {{
+                    background-color: {color};
+                    border-radius: 27px;
+                    font-size: 22px;
+                    border: none;
+                }}
+            """)
         layout.addWidget(icon_label)
         
         # Contenedor de texto a la derecha
@@ -92,14 +123,14 @@ class StatCard(QFrame):
         extra_label.setStyleSheet("color: #666666; font-size: 12px; border: none; background-color: transparent;")
         extra_label.setWordWrap(True)
         
+        text_layout.addStretch()
         text_layout.addWidget(title_label)
         text_layout.addWidget(value_label)
         if extra_info:
             text_layout.addWidget(extra_label)
         text_layout.addStretch()
-        
-        layout.addLayout(text_layout)
-        layout.addStretch()
+
+        layout.addLayout(text_layout, 1)
         
         self.label_valor = value_label
         self.label_extra = extra_label
@@ -395,56 +426,6 @@ class DashboardView(QWidget):
                 border: none;
                 border-radius: 10px;
             }
-            QCalendarWidget QAbstractItemView {
-                selection-background-color: #5e88b4;
-                selection-color: white;
-                color: #2c2c2c;
-                background-color: #eaf0f9;
-            }
-            QCalendarWidget QWidget {
-                color: #2c2c2c;
-                background-color: #eaf0f9;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #dce7f3;
-            }
-            QCalendarWidget QToolButton {
-                color: #2c2c2c;
-                background-color: #dce7f3;
-            }
-            QCalendarWidget QMenu {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QSpinBox {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QAbstractItemView:enabled {
-                color: #2c2c2c;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton#qt_calendar_prevmonth,
-            QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton#qt_calendar_nextmonth {
-                qproperty-icon: none;
-            }
-            QCalendarWidget QAbstractItemView::item:disabled {
-                color: #555555;
-            }
-            QCalendarWidget QTableView::item:selected {
-                background-color: #808080;
-                color: white;
-            }
-            QCalendarWidget QWidget {
-                alternate-background-color: #f5f5f5;
-            }
-            QCalendarWidget QAbstractItemView:enabled[isHeaderRow="true"] {
-                color: #555555;
-                font-weight: bold;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QTableView {
-                color: #2c2c2c;
-            }
         """)
         
         layout = QVBoxLayout()
@@ -535,18 +516,7 @@ class DashboardView(QWidget):
         label_filtros.setStyleSheet("color: #555555; font-weight: bold; font-size: 13px; border: none;")
         filtros_fecha_layout.addWidget(label_filtros)
         
-        estilo_date = """
-            QDateEdit {
-                padding: 6px 10px;
-                border: none;
-                border-radius: 4px;
-                background-color: #f5f5f5;
-                font-size: 12px;
-                color: #2c2c2c;
-                min-width: 120px;
-            }
-            QDateEdit:focus { border: 2px solid #c0c0c0; }
-            QDateEdit::drop-down { border: none; }
+        _cal_ss = """
             QCalendarWidget QAbstractItemView {
                 selection-background-color: #5e88b4;
                 selection-color: white;
@@ -572,22 +542,22 @@ class DashboardView(QWidget):
                 color: #2c2c2c;
                 background-color: #f0f0f0;
             }
-            QCalendarWidget QAbstractItemView:enabled {
-                color: #2c2c2c;
-            }
-            QCalendarWidget QAbstractItemView::item:disabled {
-                color: #555555;
-            }
-            QCalendarWidget QTableView::item:selected {
-                background-color: #808080;
-                color: white;
-            }
-            QCalendarWidget QWidget {
-                alternate-background-color: #f5f5f5;
-            }
             QCalendarWidget QTableView {
                 color: #2c2c2c;
             }
+        """
+        estilo_date = """
+            QDateEdit {
+                padding: 6px 10px;
+                border: none;
+                border-radius: 4px;
+                background-color: #f5f5f5;
+                font-size: 12px;
+                color: #2c2c2c;
+                min-width: 120px;
+            }
+            QDateEdit:focus { border: 2px solid #c0c0c0; }
+            QDateEdit::drop-down { border: none; }
         """
         
         label_desde = QLabel("Desde:")
@@ -599,6 +569,7 @@ class DashboardView(QWidget):
         self.date_desde.setDate(QDate(date.today().year, date.today().month, 1))
         self.date_desde.setDisplayFormat("dd/MM/yyyy")
         self.date_desde.setStyleSheet(estilo_date)
+        self.date_desde.calendarWidget().setStyleSheet(_cal_ss)
         filtros_fecha_layout.addWidget(self.date_desde)
         
         label_hasta = QLabel("Hasta:")
@@ -610,6 +581,7 @@ class DashboardView(QWidget):
         self.date_hasta.setDate(QDate.currentDate())
         self.date_hasta.setDisplayFormat("dd/MM/yyyy")
         self.date_hasta.setStyleSheet(estilo_date)
+        self.date_hasta.calendarWidget().setStyleSheet(_cal_ss)
         filtros_fecha_layout.addWidget(self.date_hasta)
         
         btn_aplicar_fecha = QPushButton("Aplicar")
@@ -649,11 +621,11 @@ class DashboardView(QWidget):
         metricas_layout = QHBoxLayout()
         metricas_layout.setSpacing(15)
         
-        self.card_activas = StatCard("Activas", "0", "#27ae60", "✅")
-        self.card_por_vencer = StatCard("Por vencer", "0", "#f39c12", "⏰")
-        self.card_vencidas = StatCard("Vencidas", "0", "#e74c3c", "❌")
-        self.card_pagos_mes = StatCard("Ingresos", "$0", "#3498db", "💵")
-        self.card_stock_bajo = StatCard("Stock bajo", "0", "#e67e22", "⚠️")
+        self.card_activas    = StatCard("Membresias Activas",    "0",  "#27ae60", "fa5s.check-circle")
+        self.card_por_vencer = StatCard("Membresias por Vencer",  "0",  "#f39c12", "fa5s.bell")
+        self.card_vencidas   = StatCard("Membresias Vencidas",    "0",  "#e74c3c", "fa5s.times-circle")
+        self.card_pagos_mes  = StatCard("Ingresos",    "$0", "#3498db", "fa5s.dollar-sign")
+        self.card_stock_bajo = StatCard("Stock bajo",  "0",  "#e67e22", "fa5s.exclamation-triangle")
 
         
         metricas_layout.addWidget(self.card_activas)

@@ -198,6 +198,46 @@ def init_database():
         ON asistencias(fecha)
     """)
 
+    # Tabla de auditoría de inventario
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS inventario_auditoria (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER,
+            producto_nombre TEXT NOT NULL,
+            accion TEXT NOT NULL,
+            campo TEXT,
+            valor_anterior TEXT,
+            valor_nuevo TEXT,
+            usuario TEXT NOT NULL,
+            fecha_hora TEXT DEFAULT (DATETIME('now', 'localtime'))
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_auditoria_producto
+        ON inventario_auditoria(producto_id)
+    """)
+
+    # Tabla de auditoría global (todas las acciones del sistema)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS auditoria_global (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            modulo TEXT NOT NULL,
+            accion TEXT NOT NULL,
+            descripcion TEXT NOT NULL,
+            detalles TEXT,
+            usuario TEXT NOT NULL,
+            fecha_hora TEXT DEFAULT (DATETIME('now', 'localtime'))
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_auditoria_global_fecha
+        ON auditoria_global(fecha_hora)
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_auditoria_global_modulo
+        ON auditoria_global(modulo)
+    """)
+
     conn.commit()
     conn.close()
     

@@ -57,56 +57,6 @@ class AgregarMembresiaDialog(QDialog):
                 selection-background-color: #808080;
                 selection-color: white;
             }
-            QCalendarWidget QAbstractItemView {
-                selection-background-color: #808080;
-                selection-color: white;
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QToolButton {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QMenu {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QSpinBox {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QAbstractItemView:enabled {
-                color: #2c2c2c;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton#qt_calendar_prevmonth,
-            QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton#qt_calendar_nextmonth {
-                qproperty-icon: none;
-            }
-            QCalendarWidget QAbstractItemView::item:disabled {
-                color: #555555;
-            }
-            QCalendarWidget QTableView::item:selected {
-                background-color: #808080;
-                color: white;
-            }
-            QCalendarWidget QWidget {
-                alternate-background-color: #f5f5f5;
-            }
-            QCalendarWidget QAbstractItemView:enabled[isHeaderRow="true"] {
-                color: #555555;
-                font-weight: bold;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QTableView {
-                color: #2c2c2c;
-            }
             QPushButton {
                 background-color: #2c3e50;
                 color: white;
@@ -169,10 +119,41 @@ class AgregarMembresiaDialog(QDialog):
         self.combo_cliente.lineEdit().textChanged.connect(self._verificar_cliente_estado)
         
         # Fecha de inicio
+        _cal_ss = """
+            QCalendarWidget QAbstractItemView {
+                selection-background-color: #5e88b4;
+                selection-color: white;
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget {
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QToolButton {
+                color: #2c2c2c;
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QMenu {
+                color: #2c2c2c;
+                background-color: #f5f5f5;
+            }
+            QCalendarWidget QSpinBox {
+                color: #2c2c2c;
+                background-color: #f0f0f0;
+            }
+            QCalendarWidget QTableView {
+                color: #2c2c2c;
+            }
+        """
         self.fecha_inicio = QDateEdit()
         self.fecha_inicio.setDate(QDate.currentDate())
         self.fecha_inicio.setCalendarPopup(True)
         self.fecha_inicio.setDisplayFormat("dd/MM/yyyy")
+        self.fecha_inicio.calendarWidget().setStyleSheet(_cal_ss)
         layout.addRow("Fecha Inicio:", self.fecha_inicio)
         
         # Tipo de membresía
@@ -536,6 +517,36 @@ class MembresiasView(QWidget):
         label_fecha.setStyleSheet("color: #555555; font-weight: bold; font-size: 13px;")
         filtros_fecha_layout.addWidget(label_fecha)
         
+        _cal_ss = """
+            QCalendarWidget QAbstractItemView {
+                selection-background-color: #5e88b4;
+                selection-color: white;
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget {
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QToolButton {
+                color: #2c2c2c;
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QMenu {
+                color: #2c2c2c;
+                background-color: #f5f5f5;
+            }
+            QCalendarWidget QSpinBox {
+                color: #2c2c2c;
+                background-color: #f0f0f0;
+            }
+            QCalendarWidget QTableView {
+                color: #2c2c2c;
+            }
+        """
         estilo_date_m = """
             QDateEdit {
                 padding: 6px 10px;
@@ -548,47 +559,6 @@ class MembresiasView(QWidget):
             }
             QDateEdit:focus { border: 2px solid #c0c0c0; }
             QDateEdit::drop-down { border: none; }
-            QCalendarWidget QAbstractItemView {
-                selection-background-color: #808080;
-                selection-color: white;
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QToolButton {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QMenu {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QSpinBox {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QAbstractItemView:enabled {
-                color: #2c2c2c;
-            }
-            QCalendarWidget QAbstractItemView::item:disabled {
-                color: #555555;
-            }
-            QCalendarWidget QTableView::item:selected {
-                background-color: #808080;
-                color: white;
-            }
-            QCalendarWidget QWidget {
-                alternate-background-color: #f5f5f5;
-            }
-            QCalendarWidget QTableView {
-                color: #2c2c2c;
-            }
         """
         
         label_desde_m = QLabel("Desde:")
@@ -600,6 +570,7 @@ class MembresiasView(QWidget):
         self.date_desde.setDate(QDate(date.today().year, date.today().month, 1))
         self.date_desde.setDisplayFormat("dd/MM/yyyy")
         self.date_desde.setStyleSheet(estilo_date_m)
+        self.date_desde.calendarWidget().setStyleSheet(_cal_ss)
         filtros_fecha_layout.addWidget(self.date_desde)
         
         label_hasta_m = QLabel("Hasta:")
@@ -611,6 +582,7 @@ class MembresiasView(QWidget):
         self.date_hasta.setDate(QDate.currentDate())
         self.date_hasta.setDisplayFormat("dd/MM/yyyy")
         self.date_hasta.setStyleSheet(estilo_date_m)
+        self.date_hasta.calendarWidget().setStyleSheet(_cal_ss)
         filtros_fecha_layout.addWidget(self.date_hasta)
         
         btn_filtrar_fecha = QPushButton("Filtrar")
@@ -793,7 +765,10 @@ class MembresiasView(QWidget):
             try:
                 # Verificar si el cliente ya tiene una membresía activa
                 membresia_activa = membresia_service.obtener_membresia_activa(datos['cliente_id'])
-                if membresia_activa:
+                nueva_inicio = datos['fecha_inicio']
+                if isinstance(nueva_inicio, str):
+                    nueva_inicio = date.fromisoformat(nueva_inicio)
+                if membresia_activa and nueva_inicio <= date.fromisoformat(membresia_activa['fecha_vencimiento']):
                     cliente = cliente_service.obtener_cliente(datos['cliente_id'])
                     msg = QMessageBox(self)
                     msg.setWindowTitle("Membresía Activa")

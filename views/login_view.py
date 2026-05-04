@@ -43,7 +43,7 @@ class LoginDialog(QDialog):
             }
             QMessageBox QPushButton {
                 color: #ffffff;
-                background-color: #2c3e50;
+                background-color: #3498db;
                 border: none;
                 border-radius: 4px;
                 padding: 8px 20px;
@@ -52,7 +52,7 @@ class LoginDialog(QDialog):
                 min-width: 80px;
             }
             QMessageBox QPushButton:hover {
-                background-color: #3d5166;
+                background-color: #2980b9;
             }
             QFrame#LoginCard {
                 background-color: #111111;

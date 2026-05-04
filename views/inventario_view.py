@@ -1,17 +1,360 @@
 """Vista de gestión de inventario"""
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
+import os
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
                                QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
                                QDialog, QFormLayout, QLineEdit, QComboBox,
-                               QMessageBox, QDialogButtonBox, QSpinBox, QDoubleSpinBox)
+                               QMessageBox, QDialogButtonBox, QSpinBox, QDoubleSpinBox,
+                               QFileDialog)
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QColor
 from services import inventario_service
+from usuario_activo import obtener_usuario_activo
 from utils.iconos_ui import crear_boton_icono, crear_widget_centrado
 from utils.table_styles import aplicar_estilo_tabla_moderna
 from utils.table_utils import limpiar_tabla
 from utils.validators import crear_validador_nombre, crear_validador_entero, crear_validador_numerico_decimal
 
 
+# ===========================================================================
+# Diálogo de importación masiva
+# ===========================================================================
+
+class ImportarArchivoDialog(QDialog):
+    """Diálogo para importar productos masivamente desde Excel (.xlsx) o PDF."""
+
+    _STYLE = """
+        QDialog { background-color: #f5f5f5; }
+        QLabel  { color: #2c2c2c; font-size: 13px; }
+        QTableWidget {
+            background-color: #ffffff;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            gridline-color: #e0e0e0;
+            color: #1a1a1a;
+            font-size: 12px;
+        }
+        QTableWidget::item { padding: 4px 8px; }
+        QHeaderView::section {
+            background-color: #2c3e50;
+            color: white;
+            font-weight: bold;
+            padding: 6px;
+            border: none;
+        }
+        QPushButton {
+            background-color: #2c3e50;
+            color: white;
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 13px;
+            min-width: 100px;
+        }
+        QPushButton:hover    { background-color: #3d5166; }
+        QPushButton:disabled { background-color: #aaaaaa; color: #ffffff; }
+        QPushButton#btn_importar       { background-color: #27ae60; }
+        QPushButton#btn_importar:hover { background-color: #229954; }
+        QLineEdit {
+            padding: 8px;
+            border: 2px solid #d0d0d0;
+            border-radius: 4px;
+            background-color: #f0f0f0;
+            color: #1a1a1a;
+            font-size: 13px;
+        }
+    """
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Importar Productos")
+        self.setMinimumSize(860, 580)
+        self.productos_validos = []
+        self.filepath = None
+        self._init_ui()
+
+    def _init_ui(self):
+        self.setStyleSheet(self._STYLE)
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        titulo = QLabel("Importar Productos desde Archivo")
+        titulo.setFont(QFont("Arial", 16, QFont.Bold))
+        titulo.setStyleSheet("color: #1a1a1a; margin-bottom: 4px;")
+        layout.addWidget(titulo)
+
+        nota = QLabel(
+            "Formatos soportados: Excel (.xlsx) y PDF con tablas.\n"
+            "Columnas esperadas: nombre, categoria, cantidad, precio, stock_minimo"
+        )
+        nota.setStyleSheet("color: #666666; font-size: 12px;")
+        layout.addWidget(nota)
+
+        file_row = QHBoxLayout()
+        self.lbl_archivo = QLineEdit()
+        self.lbl_archivo.setPlaceholderText("Ningún archivo seleccionado...")
+        self.lbl_archivo.setReadOnly(True)
+        file_row.addWidget(self.lbl_archivo)
+
+        btn_sel = QPushButton("Seleccionar archivo")
+        btn_sel.setMinimumWidth(160)
+        btn_sel.clicked.connect(self._seleccionar_archivo)
+        file_row.addWidget(btn_sel)
+
+        btn_proc = QPushButton("Procesar")
+        btn_proc.setMinimumWidth(100)
+        btn_proc.clicked.connect(self._procesar_archivo)
+        file_row.addWidget(btn_proc)
+        layout.addLayout(file_row)
+
+        self.lbl_resumen = QLabel("")
+        self.lbl_resumen.setStyleSheet("font-size: 12px; color: #555555;")
+        layout.addWidget(self.lbl_resumen)
+
+        self.tabla_preview = QTableWidget()
+        self.tabla_preview.setColumnCount(7)
+        self.tabla_preview.setHorizontalHeaderLabels([
+            "Nombre", "Categoría", "Cantidad", "Precio", "Stock Mín.", "Estado", "Detalle"
+        ])
+        self.tabla_preview.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabla_preview.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabla_preview.setSelectionMode(QTableWidget.NoSelection)
+        self.tabla_preview.verticalHeader().setVisible(False)
+        layout.addWidget(self.tabla_preview)
+
+        bottom = QHBoxLayout()
+        bottom.addStretch()
+
+        btn_cancelar = QPushButton("Cancelar")
+        btn_cancelar.clicked.connect(self.reject)
+        bottom.addWidget(btn_cancelar)
+
+        self.btn_importar = QPushButton("Importar productos válidos")
+        self.btn_importar.setObjectName("btn_importar")
+        self.btn_importar.setEnabled(False)
+        self.btn_importar.clicked.connect(self.accept)
+        bottom.addWidget(self.btn_importar)
+        layout.addLayout(bottom)
+
+        self.setLayout(layout)
+
+    def _seleccionar_archivo(self):
+        filepath, _ = QFileDialog.getOpenFileName(
+            self, "Seleccionar archivo", "",
+            "Archivos soportados (*.xlsx *.pdf);;Excel (*.xlsx);;PDF (*.pdf)"
+        )
+        if filepath:
+            self.filepath = filepath
+            self.lbl_archivo.setText(filepath)
+            self.tabla_preview.setRowCount(0)
+            self.lbl_resumen.setText("")
+            self.btn_importar.setEnabled(False)
+            self.productos_validos = []
+
+    def _procesar_archivo(self):
+        if not self.filepath:
+            QMessageBox.warning(self, "Aviso", "Seleccione un archivo primero.")
+            return
+        try:
+            from services import importacion_inventario_service as imp_svc
+            ext = os.path.splitext(self.filepath)[1].lower()
+            if ext == ".xlsx":
+                raw = imp_svc.leer_excel(self.filepath)
+            elif ext == ".pdf":
+                raw = imp_svc.leer_pdf(self.filepath)
+            else:
+                QMessageBox.warning(
+                    self, "Formato no soportado",
+                    "Solo se aceptan archivos .xlsx y .pdf"
+                )
+                return
+            if not raw:
+                QMessageBox.information(
+                    self, "Sin datos",
+                    "No se encontraron datos en el archivo."
+                )
+                return
+            productos = imp_svc.validar_productos(raw)
+            self._mostrar_preview(productos)
+        except ImportError as e:
+            QMessageBox.critical(self, "Dependencia faltante", str(e))
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error al procesar",
+                f"No se pudo procesar el archivo:\n{str(e)}"
+            )
+
+    def _mostrar_preview(self, productos):
+        self.productos_validos = [p for p in productos if not p["errores"]]
+        total    = len(productos)
+        validos  = len(self.productos_validos)
+        invalidos = total - validos
+
+        self.lbl_resumen.setText(
+            f"Total: {total} filas  |  ✓ Válidos: {validos}  |  ✗ Con errores: {invalidos}"
+        )
+
+        color_ok  = QColor("#e8fdf0")
+        color_err = QColor("#fde8e8")
+        self.tabla_preview.setSortingEnabled(False)
+        self.tabla_preview.setRowCount(total)
+
+        for i, p in enumerate(productos):
+            es_valido = not p["errores"]
+            color = color_ok if es_valido else color_err
+            celdas = [
+                p.get("nombre", ""),
+                p.get("categoria", ""),
+                str(p.get("cantidad", 0)),
+                f"${p.get('precio', 0):.2f}",
+                str(p.get("stock_minimo", 0)),
+                "✓ Válido" if es_valido else "✗ Error",
+                ", ".join(p["errores"]) if p["errores"] else "",
+            ]
+            for j, texto in enumerate(celdas):
+                item = QTableWidgetItem(str(texto))
+                item.setBackground(color)
+                if j == 5:
+                    item.setForeground(
+                        QColor("#27ae60") if es_valido else QColor("#e74c3c")
+                    )
+                self.tabla_preview.setItem(i, j, item)
+
+        self.btn_importar.setEnabled(validos > 0)
+        self.btn_importar.setText(f"Importar {validos} producto(s) válido(s)")
+
+    def obtener_productos_validos(self):
+        return self.productos_validos
+
+
+# ===========================================================================
+# Diálogo de historial de auditoría
+# ===========================================================================
+
+class HistorialProductoDialog(QDialog):
+    """Muestra el historial de auditoría de un producto."""
+
+    _STYLE = """
+        QDialog { background-color: #f5f5f5; }
+        QLabel  { color: #2c2c2c; font-size: 13px; }
+        QTableWidget {
+            background-color: #ffffff;
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            gridline-color: #e0e0e0;
+            color: #1a1a1a;
+            font-size: 12px;
+        }
+        QTableWidget::item { padding: 4px 8px; }
+        QHeaderView::section {
+            background-color: #2c3e50;
+            color: white;
+            font-weight: bold;
+            padding: 6px;
+            border: none;
+        }
+        QPushButton {
+            background-color: #2c3e50;
+            color: white;
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 13px;
+            min-width: 80px;
+        }
+        QPushButton:hover { background-color: #3d5166; }
+    """
+
+    def __init__(self, producto_id, producto_nombre, parent=None):
+        super().__init__(parent)
+        self.producto_id = producto_id
+        self.setWindowTitle(f"Historial – {producto_nombre}")
+        self.setMinimumSize(900, 480)
+        self._init_ui(producto_nombre)
+
+    def _init_ui(self, nombre):
+        self.setStyleSheet(self._STYLE)
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        titulo = QLabel(f"Historial de cambios: {nombre}")
+        titulo.setFont(QFont("Arial", 15, QFont.Bold))
+        titulo.setStyleSheet("color: #1a1a1a;")
+        layout.addWidget(titulo)
+
+        self.tabla = QTableWidget()
+        self.tabla.setColumnCount(6)
+        self.tabla.setHorizontalHeaderLabels([
+            "Fecha y Hora", "Acción", "Campo", "Valor Anterior", "Valor Nuevo", "Usuario"
+        ])
+        self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabla.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.tabla.setSelectionMode(QTableWidget.NoSelection)
+        self.tabla.verticalHeader().setVisible(False)
+        self.tabla.setAlternatingRowColors(False)
+        layout.addWidget(self.tabla)
+
+        self.lbl_vacio = QLabel("No hay registros de auditoría para este producto.")
+        self.lbl_vacio.setStyleSheet("color: #888888; font-size: 12px;")
+        self.lbl_vacio.setAlignment(Qt.AlignCenter)
+        self.lbl_vacio.setVisible(False)
+        layout.addWidget(self.lbl_vacio)
+
+        bottom = QHBoxLayout()
+        bottom.addStretch()
+        btn_cerrar = QPushButton("Cerrar")
+        btn_cerrar.clicked.connect(self.accept)
+        bottom.addWidget(btn_cerrar)
+        layout.addLayout(bottom)
+
+        self.setLayout(layout)
+        self._cargar_historial()
+
+    def _cargar_historial(self):
+        historial = inventario_service.obtener_historial_producto(self.producto_id)
+        if not historial:
+            self.tabla.setVisible(False)
+            self.lbl_vacio.setVisible(True)
+            return
+
+        colores_fondo = {
+            "CREAR":     QColor("#e8fdf0"),
+            "MODIFICAR": QColor("#fff8e1"),
+            "ELIMINAR":  QColor("#fde8e8"),
+            "IMPORTAR":  QColor("#e8f4fd"),
+        }
+        colores_accion = {
+            "CREAR":     QColor("#27ae60"),
+            "MODIFICAR": QColor("#d68910"),
+            "ELIMINAR":  QColor("#e74c3c"),
+            "IMPORTAR":  QColor("#2980b9"),
+        }
+
+        self.tabla.setRowCount(len(historial))
+        for i, reg in enumerate(historial):
+            accion = reg.get("accion", "")
+            color_fondo = colores_fondo.get(accion, QColor("#ffffff"))
+            celdas = [
+                reg.get("fecha_hora", ""),
+                accion,
+                reg.get("campo")          or "—",
+                reg.get("valor_anterior") or "—",
+                reg.get("valor_nuevo")    or "—",
+                reg.get("usuario", ""),
+            ]
+            for j, texto in enumerate(celdas):
+                item = QTableWidgetItem(str(texto))
+                item.setBackground(color_fondo)
+                if j == 1:
+                    item.setForeground(colores_accion.get(accion, QColor("#2c2c2c")))
+                self.tabla.setItem(i, j, item)
+        self.tabla.resizeRowsToContents()
+
+
+# ===========================================================================
 class AgregarProductoDialog(QDialog):
     """Diálogo para agregar/editar producto"""
     def __init__(self, parent=None, producto=None):
@@ -236,7 +579,26 @@ class InventarioView(QWidget):
         """)
         btn_agregar.clicked.connect(self.agregar_producto)
         header_layout.addWidget(btn_agregar)
-        
+
+        btn_importar_archivo = QPushButton("Importar archivo")
+        btn_importar_archivo.setStyleSheet("""
+            QPushButton {
+                background-color: #27ae60;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 5px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #229954;
+                color: white;
+            }
+        """)
+        btn_importar_archivo.clicked.connect(self.importar_archivo)
+        header_layout.addWidget(btn_importar_archivo)
+
         layout.addLayout(header_layout)
         
         # Filtros por categoría
@@ -359,7 +721,11 @@ class InventarioView(QWidget):
             btn_eliminar = crear_boton_icono("delete.svg", "#e74c3c", "#c0392b", "Eliminar")
             btn_eliminar.clicked.connect(lambda checked, pid=producto['id']: self.eliminar_producto(pid))
             acciones_layout.addWidget(btn_eliminar)
-            
+
+            btn_hist = crear_boton_icono("history.svg", "#7a6fa0", "#6a5f90", "Ver historial")
+            btn_hist.clicked.connect(lambda checked, p=producto: self.mostrar_historial(p))
+            acciones_layout.addWidget(btn_hist)
+
             self.tabla.setCellWidget(i, 4, acciones_widget)
 
         self.tabla.setSortingEnabled(sorting_enabled)
@@ -389,7 +755,8 @@ class InventarioView(QWidget):
                     categoria=datos['categoria'],
                     cantidad=datos['cantidad'],
                     precio=datos['precio'],
-                    stock_minimo=datos.get('stock_minimo', 0)
+                    stock_minimo=datos.get('stock_minimo', 0),
+                    usuario=obtener_usuario_activo()
                 )
                 
                 msg = QMessageBox(self)
@@ -461,7 +828,8 @@ class InventarioView(QWidget):
                     categoria=datos['categoria'],
                     cantidad=datos['cantidad'],
                     precio=datos['precio'],
-                    stock_minimo=datos.get('stock_minimo', 0)
+                    stock_minimo=datos.get('stock_minimo', 0),
+                    usuario=obtener_usuario_activo()
                 )
                 
                 msg = QMessageBox(self)
@@ -555,7 +923,7 @@ class InventarioView(QWidget):
         
         if respuesta == QMessageBox.Yes:
             try:
-                inventario_service.eliminar_producto(producto_id)
+                inventario_service.eliminar_producto(producto_id, usuario=obtener_usuario_activo())
                 
                 msg = QMessageBox(self)
                 msg.setWindowTitle("Éxito")
@@ -613,4 +981,51 @@ class InventarioView(QWidget):
                     }
                 """)
                 msg.exec()
+
+    # -----------------------------------------------------------------------
+    # Importación masiva
+    # -----------------------------------------------------------------------
+
+    def importar_archivo(self):
+        """Abre el diálogo de importación masiva y procesa los productos válidos."""
+        dialog = ImportarArchivoDialog(self)
+        if not dialog.exec():
+            return
+        productos = dialog.obtener_productos_validos()
+        if not productos:
+            return
+        try:
+            insertados, duplicados = inventario_service.importar_productos_masivo(
+                productos, usuario=obtener_usuario_activo()
+            )
+            detalle = f"Productos importados correctamente: {insertados}"
+            if duplicados:
+                detalle += f"\nOmitidos por nombre duplicado: {duplicados}"
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Importación completada")
+            msg.setText(detalle)
+            msg.setStyleSheet("""
+                QMessageBox { background-color: #f5f5f5; }
+                QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }
+                QPushButton {
+                    background-color: #27ae60; color: white;
+                    padding: 8px 20px; border: none; border-radius: 4px;
+                    font-weight: bold; font-size: 13px; min-width: 80px;
+                }
+                QPushButton:hover { background-color: #229954; }
+            """)
+            msg.exec()
+            self.cargar_datos()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Error al importar productos:\n{str(e)}")
+
+    # -----------------------------------------------------------------------
+    # Historial de auditoría
+    # -----------------------------------------------------------------------
+
+    def mostrar_historial(self, producto):
+        """Abre el diálogo de historial de auditoría para el producto seleccionado."""
+        dialog = HistorialProductoDialog(producto['id'], producto['nombre'], self)
+        dialog.exec()
+
 

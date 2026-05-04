@@ -21,6 +21,37 @@ from utils.validators import crear_validador_numerico_decimal
 
 # ─────────────────────────── helpers UI ──────────────────────────
 
+_CAL_SS = """
+    QCalendarWidget QAbstractItemView {
+        selection-background-color: #5e88b4;
+        selection-color: white;
+        color: #2c2c2c;
+        background-color: #eaf0f9;
+    }
+    QCalendarWidget QWidget {
+        color: #2c2c2c;
+        background-color: #eaf0f9;
+    }
+    QCalendarWidget QWidget#qt_calendar_navigationbar {
+        background-color: #dce7f3;
+    }
+    QCalendarWidget QToolButton {
+        color: #2c2c2c;
+        background-color: #dce7f3;
+    }
+    QCalendarWidget QMenu {
+        color: #2c2c2c;
+        background-color: #f5f5f5;
+    }
+    QCalendarWidget QSpinBox {
+        color: #2c2c2c;
+        background-color: #f0f0f0;
+    }
+    QCalendarWidget QTableView {
+        color: #2c2c2c;
+    }
+"""
+
 _ESTILO_DATE = """
     QDateEdit {
         padding: 6px 10px; border: none; border-radius: 4px;
@@ -28,11 +59,6 @@ _ESTILO_DATE = """
     }
     QDateEdit:focus { border: 2px solid #c0c0c0; }
     QDateEdit::drop-down { border: none; }
-    QCalendarWidget QAbstractItemView { selection-background-color:#808080; color:#2c2c2c; background-color:#f5f5f5; }
-    QCalendarWidget QWidget { color:#2c2c2c; background-color:#f5f5f5; }
-    QCalendarWidget QToolButton { color:#2c2c2c; background-color:#f0f0f0; }
-    QCalendarWidget QTableView::item:selected { background-color:#808080; color:white; }
-    QCalendarWidget QTableView { color:#2c2c2c; }
 """
 
 _ESTILO_BTN_FLT = """
@@ -49,6 +75,17 @@ _ESTILO_BTN_LIMPIAR = """
         border:none; border-radius:4px; font-size:12px; font-weight:bold;
     }
     QPushButton:hover { background-color:#7f8c8d; }
+"""
+
+_MSG_SS = """
+    QMessageBox { background-color: #ffffff; }
+    QLabel { color: #1a1a1a; font-size: 13px; min-width: 300px; border: none; }
+    QPushButton {
+        background-color: #3498db; color: white;
+        padding: 8px 20px; border: none; border-radius: 4px;
+        font-weight: bold; font-size: 13px; min-width: 80px;
+    }
+    QPushButton:hover { background-color: #2980b9; }
 """
 
 _ESTILO_BTN_ACCION = """
@@ -115,6 +152,7 @@ def _fila_rango_fechas(parent, desde_attr, hasta_attr, callback):
     de = QDateEdit(); de.setCalendarPopup(True)
     de.setDate(QDate(date.today().year, date.today().month, 1))
     de.setDisplayFormat("dd/MM/yyyy"); de.setStyleSheet(_ESTILO_DATE)
+    de.calendarWidget().setStyleSheet(_CAL_SS)
     setattr(parent, desde_attr, de)
     row.addWidget(de)
 
@@ -123,6 +161,7 @@ def _fila_rango_fechas(parent, desde_attr, hasta_attr, callback):
     ha = QDateEdit(); ha.setCalendarPopup(True)
     ha.setDate(QDate.currentDate())
     ha.setDisplayFormat("dd/MM/yyyy"); ha.setStyleSheet(_ESTILO_DATE)
+    ha.calendarWidget().setStyleSheet(_CAL_SS)
     setattr(parent, hasta_attr, ha)
     row.addWidget(ha)
 
@@ -431,6 +470,7 @@ class FinanzasView(QWidget):
         self.eg_fecha.setDate(QDate.currentDate())
         self.eg_fecha.setDisplayFormat("dd/MM/yyyy")
         self.eg_fecha.setStyleSheet(_ESTILO_DATE)
+        self.eg_fecha.calendarWidget().setStyleSheet(_CAL_SS)
         form_layout.addRow("Fecha:", self.eg_fecha)
 
         self.eg_categoria = QComboBox()
@@ -487,6 +527,7 @@ class FinanzasView(QWidget):
         self.eg_desde.setDate(QDate(date.today().year, date.today().month, 1))
         self.eg_desde.setDisplayFormat("dd/MM/yyyy")
         self.eg_desde.setStyleSheet(_ESTILO_DATE)
+        self.eg_desde.calendarWidget().setStyleSheet(_CAL_SS)
         flt_eg.addWidget(self.eg_desde)
 
         lbl_hasta_eg = QLabel("Hasta:")
@@ -498,6 +539,7 @@ class FinanzasView(QWidget):
         self.eg_hasta.setDate(QDate.currentDate())
         self.eg_hasta.setDisplayFormat("dd/MM/yyyy")
         self.eg_hasta.setStyleSheet(_ESTILO_DATE)
+        self.eg_hasta.calendarWidget().setStyleSheet(_CAL_SS)
         flt_eg.addWidget(self.eg_hasta)
 
         btn_filtrar_eg = QPushButton("Filtrar")
@@ -596,6 +638,7 @@ class FinanzasView(QWidget):
         self.rpt_dia_top.setDate(QDate.currentDate())
         self.rpt_dia_top.setDisplayFormat("dd/MM/yyyy")
         self.rpt_dia_top.setStyleSheet(_ESTILO_DATE)
+        self.rpt_dia_top.calendarWidget().setStyleSheet(_CAL_SS)
         ctrl_dia_top.addWidget(self.rpt_dia_top)
 
         btn_pdf_dia_top = QPushButton("\U0001f4c4 PDF del día")
@@ -621,7 +664,8 @@ class FinanzasView(QWidget):
 
         sep_top = QFrame()
         sep_top.setFrameShape(QFrame.HLine)
-        sep_top.setStyleSheet("color:#d0d0d0; background:#d0d0d0; max-height:1px;")
+        sep_top.setFixedHeight(1)
+        sep_top.setStyleSheet("QFrame { background-color: #d0d0d0; border: none; }")
         layout.addWidget(sep_top)
 
         # ── Sección: Reportes Mensuales/Anuales ──────────────────
@@ -929,6 +973,7 @@ class FinanzasView(QWidget):
         msg.setText("¿Eliminar este ingreso?")
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
+        msg.setStyleSheet(_MSG_SS)
         if msg.exec() == QMessageBox.Yes:
             try:
                 from services import pago_service
@@ -936,7 +981,7 @@ class FinanzasView(QWidget):
                 self._cargar_ingresos()
                 self._cargar_resumen()
             except Exception as e:
-                QMessageBox.critical(self, "Error", str(e))
+                _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText(str(e)); _m.setStyleSheet(_MSG_SS); _m.exec()
 
     # ── Lógica pestaña Egresos ────────────────────────────────────
 
@@ -947,7 +992,7 @@ class FinanzasView(QWidget):
         fd = _qdate_to_date(qd_desde)
         fh = _qdate_to_date(qd_hasta)
         if fd > fh:
-            QMessageBox.warning(self, "Error", "La fecha 'Desde' no puede ser mayor que 'Hasta'.")
+            _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText("La fecha 'Desde' no puede ser mayor que 'Hasta'."); _m.setStyleSheet(_MSG_SS); _m.exec()
             return
         self._cargar_egresos(fecha_desde=fd, fecha_hasta=fh)
 
@@ -967,14 +1012,14 @@ class FinanzasView(QWidget):
         monto_txt = self.eg_monto.text().strip()
 
         if not descripcion:
-            QMessageBox.warning(self, "Error", "La descripción es obligatoria.")
+            _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText("La descripción es obligatoria."); _m.setStyleSheet(_MSG_SS); _m.exec()
             return
         try:
             monto = float(monto_txt.replace(",", "."))
             if monto <= 0:
                 raise ValueError()
         except ValueError:
-            QMessageBox.warning(self, "Error", "Ingrese un monto válido mayor a 0.")
+            _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText("Ingrese un monto válido mayor a 0."); _m.setStyleSheet(_MSG_SS); _m.exec()
             return
 
         finanzas_service.registrar_egreso(fecha, categoria, descripcion, proveedor, metodo, monto)
@@ -991,6 +1036,7 @@ class FinanzasView(QWidget):
         msg = QMessageBox(self)
         msg.setWindowTitle("Éxito")
         msg.setText("Gasto registrado correctamente.")
+        msg.setStyleSheet(_MSG_SS)
         msg.exec()
 
     def _cargar_egresos(self, fecha_desde=None, fecha_hasta=None):
@@ -1033,13 +1079,14 @@ class FinanzasView(QWidget):
         msg.setText("¿Eliminar este gasto?")
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
+        msg.setStyleSheet(_MSG_SS)
         if msg.exec() == QMessageBox.Yes:
             try:
                 finanzas_service.eliminar_egreso(egreso_id)
                 self._cargar_egresos()
                 self._cargar_resumen()
             except Exception as e:
-                QMessageBox.critical(self, "Error", str(e))
+                _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText(str(e)); _m.setStyleSheet(_MSG_SS); _m.exec()
 
     # ── Lógica pestaña Morosidad ──────────────────────────────────
 
@@ -1110,7 +1157,7 @@ class FinanzasView(QWidget):
                     concepto="Pago de membresía",
                 )
                 if not ok_pago:
-                    QMessageBox.warning(self, "Error", f"Error al registrar pago: {pago_id}")
+                    _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText(f"Error al registrar pago: {pago_id}"); _m.setStyleSheet(_MSG_SS); _m.exec()
                     return
 
                 membresia_id = membresia_service.crear_membresia(
@@ -1127,10 +1174,11 @@ class FinanzasView(QWidget):
                 msg = QMessageBox(self)
                 msg.setWindowTitle("Membresía renovada")
                 msg.setText(f"Membresía de {cliente_nombre} renovada exitosamente.")
+                msg.setStyleSheet(_MSG_SS)
                 msg.exec()
 
         except Exception as e:
-            QMessageBox.critical(self, "Error", f"Error al renovar: {str(e)}")
+            _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText(f"Error al renovar: {str(e)}"); _m.setStyleSheet(_MSG_SS); _m.exec()
 
     # ── Lógica pestaña Reportes ───────────────────────────────────
 
@@ -1237,11 +1285,12 @@ class FinanzasView(QWidget):
             msg.setText(f"Archivo guardado en:\n{ruta}")
             btn_abrir = msg.addButton("Abrir PDF", QMessageBox.ActionRole)
             msg.addButton("Cerrar", QMessageBox.RejectRole)
+            msg.setStyleSheet(_MSG_SS)
             msg.exec()
             if msg.clickedButton() == btn_abrir:
                 _abrir_archivo(ruta)
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText(str(e)); _m.setStyleSheet(_MSG_SS); _m.exec()
 
     def _exportar_excel_diario(self, date_edit=None):
         qd = (date_edit or self.rpt_dia_top).date()
@@ -1253,11 +1302,12 @@ class FinanzasView(QWidget):
             msg.setText(f"Archivo guardado en:\n{ruta}")
             btn_abrir = msg.addButton("Abrir carpeta", QMessageBox.ActionRole)
             msg.addButton("Cerrar", QMessageBox.RejectRole)
+            msg.setStyleSheet(_MSG_SS)
             msg.exec()
             if msg.clickedButton() == btn_abrir:
                 _abrir_carpeta(ruta)
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText(str(e)); _m.setStyleSheet(_MSG_SS); _m.exec()
 
     def _exportar_excel(self):
         año, mes = self._get_año_mes_rpt()
@@ -1268,11 +1318,12 @@ class FinanzasView(QWidget):
             msg.setText(f"Archivo guardado en:\n{ruta}")
             btn_abrir = msg.addButton("Abrir carpeta", QMessageBox.ActionRole)
             msg.addButton("Cerrar", QMessageBox.RejectRole)
+            msg.setStyleSheet(_MSG_SS)
             msg.exec()
             if msg.clickedButton() == btn_abrir:
                 _abrir_carpeta(ruta)
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText(str(e)); _m.setStyleSheet(_MSG_SS); _m.exec()
 
     def _exportar_pdf(self):
         año, mes = self._get_año_mes_rpt()
@@ -1283,11 +1334,12 @@ class FinanzasView(QWidget):
             msg.setText(f"Archivo guardado en:\n{ruta}")
             btn_abrir = msg.addButton("Abrir PDF", QMessageBox.ActionRole)
             msg.addButton("Cerrar", QMessageBox.RejectRole)
+            msg.setStyleSheet(_MSG_SS)
             msg.exec()
             if msg.clickedButton() == btn_abrir:
                 _abrir_archivo(ruta)
         except Exception as e:
-            QMessageBox.critical(self, "Error", str(e))
+            _m = QMessageBox(self); _m.setWindowTitle("Error"); _m.setText(str(e)); _m.setStyleSheet(_MSG_SS); _m.exec()
 
 
 # ─────────────────────────── helpers OS ──────────────────────────

@@ -7,9 +7,9 @@ import os
 import ctypes
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QPushButton, QStackedWidget, QLabel, QFrame,
-                               QDialog, QMessageBox)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QIcon, QPixmap
+                               QDialog, QMessageBox, QGraphicsDropShadowEffect)
+from PySide6.QtCore import Qt, QTimer, QPoint
+from PySide6.QtGui import QFont, QIcon, QPixmap, QColor
 
 # Inicializar base de datos
 from db import init_database, ensure_default_user, verify_user, get_user_role, get_user_fullname
@@ -24,6 +24,112 @@ from views.pagos_view import PagosView
 from views.inventario_view import InventarioView
 from views.finanzas_view import FinanzasView
 from views.configuracion_view import ConfiguracionView
+from services import cliente_service
+
+
+class BirthdayToast(QFrame):
+    """Toast flotante de cumpleaños — widget hijo del central widget (sin ventana layered)."""
+
+    def __init__(self, nombre, parent, offset_y=0):
+        # Hijo directo del parent: evita ventanas layered transparentes de Windows
+        super().__init__(parent)
+        self._offset_y = offset_y
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self._build_ui(nombre)
+        self._apply_shadow()
+        # Auto-cerrar a los 30 segundos
+        QTimer.singleShot(30000, self.close)
+
+    def _build_ui(self, nombre):
+        self.setFixedWidth(340)
+        self.setStyleSheet("""
+            BirthdayToast {
+                background-color: rgba(254, 252, 232, 210);
+                border-radius: 14px;
+                border: 1px solid #FDE68A;
+            }
+        """)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(20, 16, 20, 18)
+        outer.setSpacing(6)
+
+        # ── Fila superior: pastel + título + cerrar ──────────────
+        top_row = QHBoxLayout()
+        top_row.setSpacing(10)
+
+        lbl_cake = QLabel("🎂")
+        lbl_cake.setStyleSheet("font-size: 26px; background: transparent; border: none;")
+        top_row.addWidget(lbl_cake, alignment=Qt.AlignVCenter)
+
+        lbl_title = QLabel("¡Feliz cumpleaños!")
+        lbl_title.setStyleSheet("""
+            font-size: 16px;
+            font-weight: bold;
+            color: #78350F;
+            background: transparent;
+            border: none;
+        """)
+        top_row.addWidget(lbl_title, 1, Qt.AlignVCenter)
+
+        btn_close = QPushButton("×")
+        btn_close.setFixedSize(22, 22)
+        btn_close.setCursor(Qt.PointingHandCursor)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #92400E;
+                font-size: 16px;
+                font-weight: bold;
+                border: none;
+                padding: 0;
+            }
+            QPushButton:hover { color: #78350F; }
+        """)
+        btn_close.clicked.connect(self.close)
+        top_row.addWidget(btn_close, alignment=Qt.AlignTop)
+
+        outer.addLayout(top_row)
+
+        # ── Fila inferior: texto + confeti ────────────────────────
+        bot_row = QHBoxLayout()
+        bot_row.setSpacing(10)
+
+        lbl_body = QLabel(f"Hoy es el cumpleaños de <b>{nombre}</b>.")
+        lbl_body.setStyleSheet("""
+            font-size: 13px;
+            color: #4B3510;
+            background: transparent;
+            border: none;
+        """)
+        lbl_body.setWordWrap(True)
+        bot_row.addWidget(lbl_body, 1, Qt.AlignVCenter)
+
+        lbl_confetti = QLabel("🎉")
+        lbl_confetti.setStyleSheet("font-size: 28px; background: transparent; border: none;")
+        bot_row.addWidget(lbl_confetti, alignment=Qt.AlignBottom)
+
+        outer.addLayout(bot_row)
+        self.adjustSize()
+
+    def _apply_shadow(self):
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(18)
+        shadow.setOffset(0, 3)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        self.setGraphicsEffect(shadow)
+
+    def place(self, parent_widget):
+        """Posiciona el toast en la esquina inferior derecha del widget padre."""
+        self.adjustSize()
+        margin = 24
+        pw = parent_widget.width()
+        ph = parent_widget.height()
+        x = pw - self.width() - margin
+        y = ph - self.height() - margin - self._offset_y
+        self.move(x, y)
+        self.raise_()
+        self.show()
 
 
 class SidebarButton(QPushButton):
@@ -75,6 +181,8 @@ class MainWindow(QMainWindow):
         self.init_ui()
         self.aplicar_restricciones_rol()
         self.ir_a_inicio()
+        self._toasts_activos = []
+        QTimer.singleShot(700, self.mostrar_notificacion_cumpleanos)
     
     def init_ui(self):
         """Inicializa la interfaz de usuario"""
@@ -258,6 +366,28 @@ class MainWindow(QMainWindow):
 
         return perfil_frame
     
+    def mostrar_notificacion_cumpleanos(self):
+        """Muestra un toast por cada cliente que cumple años hoy."""
+        try:
+            cumpleaneros = cliente_service.obtener_cumpleaneros_hoy()
+            if not cumpleaneros:
+                return
+            # El toast es hijo del centralWidget para evitar ventanas layered en Windows
+            parent_widget = self.centralWidget()
+            toast_h = 120   # altura estimada por toast
+            gap    = 12     # separación entre toasts
+            for idx, cliente in enumerate(cumpleaneros):
+                offset_y = idx * (toast_h + gap)
+                toast = BirthdayToast(cliente['nombre'], parent=parent_widget, offset_y=offset_y)
+                toast.place(parent_widget)
+                self._toasts_activos.append(toast)
+                toast.destroyed.connect(
+                    lambda _, t=toast: self._toasts_activos.remove(t)
+                    if t in self._toasts_activos else None
+                )
+        except Exception:
+            pass
+
     def ir_a_inicio(self):
         """Navega a la vista inicial según el rol del usuario."""
         es_privilegiado = self.rol_usuario == 'admin' or self.usuario_activo == 'prueba'
@@ -352,7 +482,7 @@ def main():
         }
         QMessageBox QPushButton {
             color: #ffffff;
-            background-color: #2c3e50;
+            background-color: #3498db;
             border: none;
             border-radius: 4px;
             padding: 8px 20px;
@@ -361,7 +491,7 @@ def main():
             min-width: 80px;
         }
         QMessageBox QPushButton:hover {
-            background-color: #3d5166;
+            background-color: #2980b9;
         }
     """)
     

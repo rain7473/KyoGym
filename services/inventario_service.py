@@ -1,102 +1,251 @@
-"""Servicio CRUD para inventario"""
+"""Servicio CRUD para inventario con auditoría de cambios"""
 from datetime import date
 from db import get_connection
 
 
-def crear_producto(nombre, categoria, cantidad=0, precio=0.0, stock_minimo=0):
-    """Crea un nuevo producto en el inventario"""
+# ---------------------------------------------------------------------------
+# Categorías
+# ---------------------------------------------------------------------------
+
+def obtener_categorias():
+    """Devuelve la lista de categorías distintas en el inventario."""
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute("""
+    cursor.execute("SELECT DISTINCT categoria FROM inventario ORDER BY categoria")
+    cats = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return cats
+
+
+# ---------------------------------------------------------------------------
+# Auditoría (helper interno)
+# ---------------------------------------------------------------------------
+
+def _registrar_auditoria(conn, producto_id, producto_nombre, accion, usuario,
+                          campo=None, valor_anterior=None, valor_nuevo=None):
+    """Inserta un registro en inventario_auditoria dentro de una conexión abierta."""
+    conn.execute(
+        """
+        INSERT INTO inventario_auditoria
+            (producto_id, producto_nombre, accion, campo,
+             valor_anterior, valor_nuevo, usuario)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            producto_id,
+            producto_nombre,
+            accion,
+            campo,
+            str(valor_anterior) if valor_anterior is not None else None,
+            str(valor_nuevo)    if valor_nuevo    is not None else None,
+            usuario,
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# CRUD
+# ---------------------------------------------------------------------------
+
+def crear_producto(nombre, categoria, cantidad=0, precio=0.0, stock_minimo=0,
+                   usuario="admin"):
+    """Crea un nuevo producto en el inventario y registra la acción en auditoría."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
         INSERT INTO inventario (nombre, categoria, cantidad, precio, fecha_registro, stock_minimo)
         VALUES (?, ?, ?, ?, ?, ?)
-    """, (nombre, categoria, cantidad, precio, date.today().isoformat(), stock_minimo))
-    
+        """,
+        (nombre, categoria, cantidad, precio, date.today().isoformat(), stock_minimo),
+    )
     producto_id = cursor.lastrowid
+
+    _registrar_auditoria(
+        conn, producto_id, nombre, "CREAR", usuario,
+        valor_nuevo=(
+            f"categoría={categoria}, cantidad={cantidad}, "
+            f"precio={precio:.2f}, stock_min={stock_minimo}"
+        ),
+    )
+
     conn.commit()
     conn.close()
     return producto_id
 
 
 def obtener_producto(producto_id):
-    """Obtiene un producto por ID"""
+    """Obtiene un producto por ID."""
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute("""
-        SELECT * FROM inventario WHERE id = ?
-    """, (producto_id,))
-    
+    cursor.execute("SELECT * FROM inventario WHERE id = ?", (producto_id,))
     producto = cursor.fetchone()
     conn.close()
     return dict(producto) if producto else None
 
 
 def listar_productos(buscar="", categoria=None):
-    """Lista todos los productos con opción de búsqueda y filtro por categoría"""
+    """Lista productos con búsqueda opcional y filtro por categoría."""
     conn = get_connection()
     cursor = conn.cursor()
-    
+
     query = "SELECT * FROM inventario WHERE 1=1"
     params = []
-    
+
     if buscar:
         query += " AND nombre LIKE ?"
         params.append(f"%{buscar}%")
-    
+
     if categoria:
         query += " AND categoria = ?"
         params.append(categoria)
-    
+
     query += " ORDER BY nombre ASC"
-    
     cursor.execute(query, params)
     productos = cursor.fetchall()
     conn.close()
-    
-    return [dict(producto) for producto in productos]
+    return [dict(p) for p in productos]
 
 
-def actualizar_producto(producto_id, nombre, categoria, cantidad, precio, stock_minimo=0):
-    """Actualiza un producto existente"""
+def actualizar_producto(producto_id, nombre, categoria, cantidad, precio,
+                        stock_minimo=0, usuario="admin"):
+    """Actualiza un producto y registra en auditoría cada campo modificado."""
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute("""
+
+    # Capturar valores actuales para comparar
+    cursor.execute("SELECT * FROM inventario WHERE id = ?", (producto_id,))
+    anterior = cursor.fetchone()
+
+    cursor.execute(
+        """
         UPDATE inventario
         SET nombre = ?, categoria = ?, cantidad = ?, precio = ?, stock_minimo = ?
         WHERE id = ?
-    """, (nombre, categoria, cantidad, precio, stock_minimo, producto_id))
-    
+        """,
+        (nombre, categoria, cantidad, precio, stock_minimo, producto_id),
+    )
+
+    if anterior:
+        campos = [
+            ("nombre",       anterior["nombre"],            nombre),
+            ("categoria",    anterior["categoria"],         categoria),
+            ("cantidad",     anterior["cantidad"],          cantidad),
+            ("precio",       float(anterior["precio"]),     float(precio)),
+            ("stock_minimo", anterior["stock_minimo"] or 0, stock_minimo),
+        ]
+        for campo, val_ant, val_nuevo in campos:
+            if str(val_ant) != str(val_nuevo):
+                _registrar_auditoria(
+                    conn, producto_id, nombre, "MODIFICAR", usuario,
+                    campo=campo, valor_anterior=val_ant, valor_nuevo=val_nuevo,
+                )
+
     conn.commit()
     conn.close()
 
 
-def eliminar_producto(producto_id):
-    """Elimina un producto"""
+def eliminar_producto(producto_id, usuario="admin"):
+    """Elimina un producto y registra la acción en auditoría."""
     conn = get_connection()
     cursor = conn.cursor()
-    
+
+    cursor.execute("SELECT nombre FROM inventario WHERE id = ?", (producto_id,))
+    row = cursor.fetchone()
+    nombre = row["nombre"] if row else "Desconocido"
+
+    # Auditoría antes de eliminar (FK en auditoria es SET NULL implícito)
+    _registrar_auditoria(conn, producto_id, nombre, "ELIMINAR", usuario)
+
     cursor.execute("DELETE FROM inventario WHERE id = ?", (producto_id,))
-    
     conn.commit()
     conn.close()
 
 
 def actualizar_cantidad(producto_id, cantidad):
-    """Actualiza solo la cantidad de un producto"""
+    """Actualiza solo la cantidad de un producto (operación interna de ventas)."""
     conn = get_connection()
     cursor = conn.cursor()
-    
-    cursor.execute("""
-        UPDATE inventario
-        SET cantidad = ?
-        WHERE id = ?
-    """, (cantidad, producto_id))
-    
+    cursor.execute(
+        "UPDATE inventario SET cantidad = ? WHERE id = ?",
+        (cantidad, producto_id),
+    )
     conn.commit()
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Historial / Auditoría
+# ---------------------------------------------------------------------------
+
+def obtener_historial_producto(producto_id):
+    """Devuelve el historial de auditoría de un producto, ordenado del más reciente al más antiguo."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT id, producto_nombre, accion, campo,
+               valor_anterior, valor_nuevo, usuario, fecha_hora
+        FROM inventario_auditoria
+        WHERE producto_id = ?
+        ORDER BY id DESC
+        """,
+        (producto_id,),
+    )
+    historial = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return historial
+
+
+# ---------------------------------------------------------------------------
+# Importación masiva
+# ---------------------------------------------------------------------------
+
+def importar_productos_masivo(productos, usuario="admin"):
+    """
+    Inserta en lote una lista de productos previamente validados.
+    Omite duplicados por nombre (case-insensitive).
+    Devuelve (insertados, duplicados).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    insertados = 0
+    duplicados = 0
+
+    for p in productos:
+        cursor.execute(
+            "SELECT id FROM inventario WHERE LOWER(nombre) = LOWER(?)",
+            (p["nombre"],),
+        )
+        if cursor.fetchone():
+            duplicados += 1
+            continue
+
+        cursor.execute(
+            """
+            INSERT INTO inventario
+                (nombre, categoria, cantidad, precio, fecha_registro, stock_minimo)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                p["nombre"], p["categoria"], p["cantidad"], p["precio"],
+                date.today().isoformat(), p.get("stock_minimo", 0),
+            ),
+        )
+        producto_id = cursor.lastrowid
+        _registrar_auditoria(
+            conn, producto_id, p["nombre"], "IMPORTAR", usuario,
+            valor_nuevo=(
+                f"categoría={p['categoria']}, cantidad={p['cantidad']}, "
+                f"precio={p['precio']:.2f}"
+            ),
+        )
+        insertados += 1
+
+    conn.commit()
+    conn.close()
+    return insertados, duplicados
 
 
 def obtener_categorias():

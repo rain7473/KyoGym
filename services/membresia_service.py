@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from db import get_connection
 from utils.constants import ESTADO_ACTIVA, ESTADO_POR_VENCER, ESTADO_VENCIDA, DIAS_ALERTA_VENCIMIENTO
+from services import auditoria_service
+from usuario_activo import obtener_usuario_activo
 
 
 CONFIG_FILE = Path(__file__).resolve().parent.parent / "config.json"
@@ -75,6 +77,20 @@ def crear_membresia(cliente_id, tipo="Mensual", monto=0.0, fecha_inicio=None, pa
     membresia_id = cursor.lastrowid
     conn.commit()
     conn.close()
+    try:
+        from services import cliente_service as _cs
+        _cli = _cs.obtener_cliente(cliente_id)
+        _nombre = _cli['nombre'] if _cli else f'ID {cliente_id}'
+    except Exception:
+        _nombre = f'ID {cliente_id}'
+    auditoria_service.registrar(
+        modulo='Membresías',
+        accion='CREAR',
+        descripcion=f'Membersía "{tipo}" creada para "{_nombre}"',
+        usuario=obtener_usuario_activo(),
+        detalles=f'membresia_id={membresia_id}, inicio={fecha_inicio.isoformat()}, '
+                 f'venc={fecha_vencimiento.isoformat()}, monto=${monto:.2f}',
+    )
     return membresia_id
 
 

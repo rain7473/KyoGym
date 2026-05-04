@@ -2,6 +2,8 @@
 from datetime import date, datetime
 from db import get_connection
 from services.inventario_service import vender_producto
+from services import auditoria_service
+from usuario_activo import obtener_usuario_activo
 
 
 def _auto_asistencia(cliente_id, fecha_pago):
@@ -64,6 +66,21 @@ def crear_pago(cliente_id, monto, metodo, fecha_pago=None, concepto="", producto
     conn.commit()
     conn.close()
     _auto_asistencia(cliente_id, fecha_pago)
+    try:
+        from services import cliente_service as _cs
+        _cli = _cs.obtener_cliente(cliente_id)
+        _nombre_cli = _cli['nombre'] if _cli else f'ID {cliente_id}'
+    except Exception:
+        _nombre_cli = f'ID {cliente_id}'
+    auditoria_service.registrar(
+        modulo='Pagos',
+        accion='PAGO',
+        descripcion=f'Pago ${monto:.2f} ({metodo}) para "{_nombre_cli}"'
+            + (f' — {concepto}' if concepto else ''),
+        usuario=obtener_usuario_activo(),
+        detalles=f'pago_id={pago_id}, fecha={fecha_pago.isoformat()}'
+            + (f', producto_id={producto_id}, cantidad={cantidad}' if producto_id else ''),
+    )
     return True, pago_id
 
 
@@ -109,21 +126,36 @@ def crear_pago_multiple(cliente_id, monto, metodo, items, concepto="", fecha_pag
     conn.commit()
     conn.close()
     _auto_asistencia(cliente_id, fecha_pago)
+    try:
+        from services import cliente_service as _cs2
+        _cli2 = _cs2.obtener_cliente(cliente_id)
+        _nombre_cli2 = _cli2['nombre'] if _cli2 else f'ID {cliente_id}'
+    except Exception:
+        _nombre_cli2 = f'ID {cliente_id}'
+    _items_desc = ', '.join(
+        f"{it.get('nombre','?')} x{it.get('cantidad',1)}" for it in items
+    ) if items else ''
+    auditoria_service.registrar(
+        modulo='Pagos',
+        accion='PAGO',
+        descripcion=f'Pago ${monto:.2f} ({metodo}) para "{_nombre_cli2}"'
+            + (f' — {concepto}' if concepto else ''),
+        usuario=obtener_usuario_activo(),
+        detalles=f'pago_id={pago_id}, fecha={fecha_pago.isoformat()}, ítems: {_items_desc}',
+    )
     return True, pago_id
 
 
-def obtener_pago(pago_id):
-    """Obtiene un pago por ID con información del cliente"""
+def obtener_pago(pago_id: int):
+    """Obtiene un pago por ID con información del cliente."""
     conn = get_connection()
     cursor = conn.cursor()
-    
     cursor.execute("""
         SELECT p.*, c.nombre as cliente_nombre
         FROM pagos p
         JOIN clientes c ON p.cliente_id = c.id
         WHERE p.id = ?
     """, (pago_id,))
-    
     pago = cursor.fetchone()
     conn.close()
     return dict(pago) if pago else None

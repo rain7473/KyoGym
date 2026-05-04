@@ -80,56 +80,6 @@ class RegistrarPagoDialog(QDialog):
                 selection-background-color: #808080;
                 selection-color: white;
             }
-            QCalendarWidget QAbstractItemView {
-                selection-background-color: #808080;
-                selection-color: white;
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QToolButton {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QMenu {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QSpinBox {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QAbstractItemView:enabled {
-                color: #2c2c2c;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton#qt_calendar_prevmonth,
-            QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton#qt_calendar_nextmonth {
-                qproperty-icon: none;
-            }
-            QCalendarWidget QAbstractItemView::item:disabled {
-                color: #555555;
-            }
-            QCalendarWidget QTableView::item:selected {
-                background-color: #808080;
-                color: white;
-            }
-            QCalendarWidget QWidget {
-                alternate-background-color: #f5f5f5;
-            }
-            QCalendarWidget QAbstractItemView:enabled[isHeaderRow="true"] {
-                color: #555555;
-                font-weight: bold;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QTableView {
-                color: #2c2c2c;
-            }
             QPushButton {
                 background-color: #2c3e50;
                 color: white;
@@ -196,6 +146,37 @@ class RegistrarPagoDialog(QDialog):
         self.fecha.setDate(QDate.currentDate())
         self.fecha.setCalendarPopup(True)
         self.fecha.setDisplayFormat("dd/MM/yyyy")
+        _cal_ss = """
+            QCalendarWidget QAbstractItemView {
+                selection-background-color: #5e88b4;
+                selection-color: white;
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget {
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QToolButton {
+                color: #2c2c2c;
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QMenu {
+                color: #2c2c2c;
+                background-color: #f5f5f5;
+            }
+            QCalendarWidget QSpinBox {
+                color: #2c2c2c;
+                background-color: #f0f0f0;
+            }
+            QCalendarWidget QTableView {
+                color: #2c2c2c;
+            }
+        """
+        self.fecha.calendarWidget().setStyleSheet(_cal_ss)
         layout.addRow("Fecha:", self.fecha)
         
         # Método de pago
@@ -776,6 +757,36 @@ class PagosView(QWidget):
         label_fecha.setStyleSheet("color: #555555; font-weight: bold; font-size: 13px;")
         filtros_fecha_layout.addWidget(label_fecha)
         
+        _cal_ss = """
+            QCalendarWidget QAbstractItemView {
+                selection-background-color: #5e88b4;
+                selection-color: white;
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget {
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QToolButton {
+                color: #2c2c2c;
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QMenu {
+                color: #2c2c2c;
+                background-color: #f5f5f5;
+            }
+            QCalendarWidget QSpinBox {
+                color: #2c2c2c;
+                background-color: #f0f0f0;
+            }
+            QCalendarWidget QTableView {
+                color: #2c2c2c;
+            }
+        """
         estilo_date_pagos = """
             QDateEdit {
                 padding: 6px 10px;
@@ -788,47 +799,6 @@ class PagosView(QWidget):
             }
             QDateEdit:focus { border: 2px solid #c0c0c0; }
             QDateEdit::drop-down { border: none; }
-            QCalendarWidget QAbstractItemView {
-                selection-background-color: #808080;
-                selection-color: white;
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QToolButton {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QMenu {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QSpinBox {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QAbstractItemView:enabled {
-                color: #2c2c2c;
-            }
-            QCalendarWidget QAbstractItemView::item:disabled {
-                color: #555555;
-            }
-            QCalendarWidget QTableView::item:selected {
-                background-color: #808080;
-                color: white;
-            }
-            QCalendarWidget QWidget {
-                alternate-background-color: #f5f5f5;
-            }
-            QCalendarWidget QTableView {
-                color: #2c2c2c;
-            }
         """
         
         label_desde_p = QLabel("Desde:")
@@ -840,6 +810,7 @@ class PagosView(QWidget):
         self.date_desde.setDate(QDate(date.today().year, date.today().month, 1))
         self.date_desde.setDisplayFormat("dd/MM/yyyy")
         self.date_desde.setStyleSheet(estilo_date_pagos)
+        self.date_desde.calendarWidget().setStyleSheet(_cal_ss)
         filtros_fecha_layout.addWidget(self.date_desde)
         
         label_hasta_p = QLabel("Hasta:")
@@ -851,6 +822,7 @@ class PagosView(QWidget):
         self.date_hasta.setDate(QDate.currentDate())
         self.date_hasta.setDisplayFormat("dd/MM/yyyy")
         self.date_hasta.setStyleSheet(estilo_date_pagos)
+        self.date_hasta.calendarWidget().setStyleSheet(_cal_ss)
         filtros_fecha_layout.addWidget(self.date_hasta)
         
         btn_filtrar_fecha = QPushButton("Filtrar")

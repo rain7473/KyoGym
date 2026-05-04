@@ -2,9 +2,10 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
                                QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
                                QDialog, QFormLayout, QLineEdit, QDateEdit, QComboBox,
-                               QMessageBox, QDialogButtonBox, QFrame, QTabWidget)
+                               QMessageBox, QDialogButtonBox, QFrame, QTabWidget,
+                               QStyledItemDelegate, QStyle)
 from PySide6.QtCore import Qt, QDate
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont, QColor, QBrush, QPen
 from datetime import date
 from services import cliente_service
 from services import finanzas_service
@@ -12,6 +13,47 @@ from utils.iconos_ui import crear_boton_icono, crear_widget_centrado
 from utils.table_styles import aplicar_estilo_tabla_moderna
 from utils.table_utils import limpiar_tabla
 from utils.validators import crear_validador_nombre, TelefonoFormateadoLineEdit, crear_validador_email
+
+
+# Role personalizado para identificar filas de cumpleaños
+_BIRTHDAY_ROLE = Qt.UserRole + 99
+
+
+class BirthdayRowDelegate(QStyledItemDelegate):
+    """Delegate que pinta el fondo crema en filas de cumpleañeros,
+    ignorando el stylesheet del QTableWidget."""
+
+    _BG_NORMAL   = QColor("#FFF3CD")
+    _BG_HOVER    = QColor("#FFE08A")
+    _FG_BIRTHDAY = QColor("#7a5c00")
+    _BORDER      = QColor("#f0d875")
+
+    def paint(self, painter, option, index):
+        if not index.data(_BIRTHDAY_ROLE):
+            super().paint(painter, option, index)
+            return
+
+        painter.save()
+
+        # Fondo (hover oscurece ligeramente)
+        is_hover = bool(option.state & QStyle.State_MouseOver)
+        bg = self._BG_HOVER if is_hover else self._BG_NORMAL
+        painter.fillRect(option.rect, bg)
+
+        # Borde inferior
+        painter.setPen(QPen(self._BORDER, 1))
+        painter.drawLine(option.rect.bottomLeft(), option.rect.bottomRight())
+
+        # Texto en negrita y color dorado oscuro
+        text = index.data(Qt.DisplayRole) or ""
+        text_rect = option.rect.adjusted(12, 0, -12, 0)
+        font = option.font
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(self._FG_BIRTHDAY)
+        painter.drawText(text_rect, Qt.AlignVCenter | Qt.AlignLeft, text)
+
+        painter.restore()
 
 
 class NumericTableWidgetItem(QTableWidgetItem):
@@ -90,56 +132,6 @@ class AgregarClienteDialog(QDialog):
             QLineEdit:focus, QComboBox:focus, QDateEdit:focus {
                 border: 2px solid #c0c0c0;
             }
-            QCalendarWidget QAbstractItemView {
-                selection-background-color: #808080;
-                selection-color: white;
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar {
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QToolButton {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QMenu {
-                color: #2c2c2c;
-                background-color: #f5f5f5;
-            }
-            QCalendarWidget QSpinBox {
-                color: #2c2c2c;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QAbstractItemView:enabled {
-                color: #2c2c2c;
-            }
-            QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton#qt_calendar_prevmonth,
-            QCalendarWidget QWidget#qt_calendar_navigationbar QToolButton#qt_calendar_nextmonth {
-                qproperty-icon: none;
-            }
-            QCalendarWidget QAbstractItemView::item:disabled {
-                color: #555555;
-            }
-            QCalendarWidget QTableView::item:selected {
-                background-color: #808080;
-                color: white;
-            }
-            QCalendarWidget QWidget {
-                alternate-background-color: #f5f5f5;
-            }
-            QCalendarWidget QAbstractItemView:enabled[isHeaderRow="true"] {
-                color: #555555;
-                font-weight: bold;
-                background-color: #f0f0f0;
-            }
-            QCalendarWidget QTableView {
-                color: #2c2c2c;
-            }
             QPushButton {
                 background-color: #2c3e50;
                 color: white;
@@ -171,12 +163,43 @@ class AgregarClienteDialog(QDialog):
         layout.addRow("Sexo:", self.sexo)
         
         # Fecha de nacimiento (opcional)
+        _cal_ss = """
+            QCalendarWidget QAbstractItemView {
+                selection-background-color: #5e88b4;
+                selection-color: white;
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget {
+                color: #2c2c2c;
+                background-color: #eaf0f9;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QToolButton {
+                color: #2c2c2c;
+                background-color: #dce7f3;
+            }
+            QCalendarWidget QMenu {
+                color: #2c2c2c;
+                background-color: #f5f5f5;
+            }
+            QCalendarWidget QSpinBox {
+                color: #2c2c2c;
+                background-color: #f0f0f0;
+            }
+            QCalendarWidget QTableView {
+                color: #2c2c2c;
+            }
+        """
         self.fecha_nacimiento = QDateEdit()
         self.fecha_nacimiento.setCalendarPopup(True)
         self.fecha_nacimiento.setDisplayFormat("dd/MM/yyyy")
         self.fecha_nacimiento.setMinimumDate(QDate(1900, 1, 1))
         self.fecha_nacimiento.setSpecialValueText("No especificada")
         self.fecha_nacimiento.setDate(QDate(1900, 1, 1))  # vacío por defecto
+        self.fecha_nacimiento.calendarWidget().setStyleSheet(_cal_ss)
         layout.addRow("Fecha de Nacimiento:", self.fecha_nacimiento)
         
         # Email
@@ -470,9 +493,10 @@ class ClientesView(QWidget):
         self.tabla.setEditTriggers(QTableWidget.NoEditTriggers)
         self.tabla.setSelectionMode(QTableWidget.NoSelection)
         self.tabla.setSortingEnabled(True)
-        self.tabla.setAlternatingRowColors(False)
         self.tabla.verticalHeader().setVisible(False)
         aplicar_estilo_tabla_moderna(self.tabla)
+        self.tabla.setAlternatingRowColors(False)
+        self.tabla.setItemDelegate(BirthdayRowDelegate(self.tabla))
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.tabla)
 
@@ -847,7 +871,10 @@ class ClientesView(QWidget):
             self.stat_promedio.setText(f"${stats['promedio_gasto_cliente']:,.2f}")
 
             # Tabla detallada
+            buscar = self._buscar_texto().lower()
             clientes_gasto = finanzas_service.obtener_gasto_por_cliente()
+            if buscar:
+                clientes_gasto = [c for c in clientes_gasto if buscar in c["nombre"].lower()]
             self.tabla_gasto_clientes.setSortingEnabled(False)
             limpiar_tabla(self.tabla_gasto_clientes)
             self.tabla_gasto_clientes.setRowCount(len(clientes_gasto))
@@ -882,6 +909,9 @@ class ClientesView(QWidget):
             fecha_desde, fecha_hasta = self._calcular_rango_top()
             top = finanzas_service.obtener_top_clientes_por_monto(
                 limite=50, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+            buscar = self._buscar_texto().lower()
+            if buscar:
+                top = [c for c in top if buscar in c["nombre"].lower()]
             limpiar_tabla(self.tabla_top)
             self.tabla_top.setRowCount(len(top))
             for i, c in enumerate(top):
@@ -901,6 +931,9 @@ class ClientesView(QWidget):
             fecha_desde, fecha_hasta = self._calcular_rango_frecuentes()
             frec = finanzas_service.obtener_clientes_frecuentes(
                 limite=20, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+            buscar = self._buscar_texto().lower()
+            if buscar:
+                frec = [c for c in frec if buscar in c["nombre"].lower()]
             limpiar_tabla(self.tabla_frecuentes)
             self.tabla_frecuentes.setRowCount(len(frec))
             for i, c in enumerate(frec):
@@ -920,6 +953,9 @@ class ClientesView(QWidget):
             dias_txt = self.input_dias_inactivo.text().strip()
             dias = int(dias_txt) if dias_txt.isdigit() else 60
             inactivos = finanzas_service.obtener_clientes_inactivos(dias=dias)
+            buscar = self._buscar_texto().lower()
+            if buscar:
+                inactivos = [c for c in inactivos if buscar in c["nombre"].lower()]
             limpiar_tabla(self.tabla_inactivos)
             self.tabla_inactivos.setRowCount(len(inactivos))
             for i, c in enumerate(inactivos):
@@ -937,9 +973,28 @@ class ClientesView(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
     
+    def _buscar_texto(self):
+        """Retorna el texto de búsqueda actual"""
+        return self.buscar_input.text().strip() if hasattr(self, 'buscar_input') else ""
+
     def cargar_datos(self):
-        """Carga los clientes en la tabla"""
-        buscar = self.buscar_input.text() if hasattr(self, 'buscar_input') else ""
+        """Recarga la tabla del tab activo aplicando el filtro de búsqueda"""
+        if hasattr(self, 'tabs_clientes'):
+            idx = self.tabs_clientes.currentIndex()
+            if idx == 1:
+                self._cargar_tab_estadisticas()
+                return
+            elif idx == 2:
+                self._cargar_tab_top_clientes()
+                return
+            elif idx == 3:
+                self._cargar_tab_frecuentes()
+                return
+            elif idx == 4:
+                self._cargar_tab_inactivos()
+                return
+
+        buscar = self._buscar_texto()
         clientes = cliente_service.listar_clientes(buscar=buscar)
 
         sorting_enabled = self.tabla.isSortingEnabled()
@@ -949,36 +1004,59 @@ class ClientesView(QWidget):
         
         self.tabla.setRowCount(len(clientes))
         
+        hoy = date.today()
+
         for i, cliente in enumerate(clientes):
             self.tabla.setRowHeight(i, 52)
-            # Nombre
-            self.tabla.setItem(i, 0, QTableWidgetItem(cliente['nombre']))
-            
-            # Teléfono
-            self.tabla.setItem(i, 1, QTableWidgetItem(cliente['telefono'] or "-"))
-            
-            # Edad
+
+            # Detectar cumpleaños
             fecha_nac = cliente.get('fecha_nacimiento', '')
+            es_cumpleanos = False
+            fecha = None
             if fecha_nac:
                 fecha = date.fromisoformat(fecha_nac)
-                hoy = date.today()
+                es_cumpleanos = (fecha.month == hoy.month and fecha.day == hoy.day)
+
+            # Nombre (con emoji si es cumpleaños)
+            nombre_display = f"🎂 {cliente['nombre']}" if es_cumpleanos else cliente['nombre']
+            item_nombre = QTableWidgetItem(nombre_display)
+            self.tabla.setItem(i, 0, item_nombre)
+
+            # Teléfono
+            item_tel = QTableWidgetItem(cliente['telefono'] or "-")
+            self.tabla.setItem(i, 1, item_tel)
+
+            # Edad
+            if fecha_nac and fecha:
                 edad = hoy.year - fecha.year - ((hoy.month, hoy.day) < (fecha.month, fecha.day))
-                self.tabla.setItem(i, 2, QTableWidgetItem(str(edad)))
+                item_edad = QTableWidgetItem(str(edad))
             else:
-                self.tabla.setItem(i, 2, QTableWidgetItem("-"))
-            
+                item_edad = QTableWidgetItem("-")
+            self.tabla.setItem(i, 2, item_edad)
+
             # Sexo
-            self.tabla.setItem(i, 3, QTableWidgetItem(cliente.get('sexo', "-")))
-            
+            item_sexo = QTableWidgetItem(cliente.get('sexo', "-"))
+            self.tabla.setItem(i, 3, item_sexo)
+
             # Fecha de nacimiento
-            if fecha_nac:
-                fecha_texto = fecha.strftime("%d/%m/%Y")
-            else:
-                fecha_texto = "-"
-            self.tabla.setItem(i, 4, FechaTableWidgetItem(fecha_texto))
+            fecha_texto = fecha.strftime("%d/%m/%Y") if fecha_nac and fecha else "-"
+            item_fecha = FechaTableWidgetItem(fecha_texto)
+            self.tabla.setItem(i, 4, item_fecha)
+
+            # Marcar con rol de cumpleaños para que el delegate pinte la fila (cols 0-5)
+            if es_cumpleanos:
+                for col in range(5):
+                    it = self.tabla.item(i, col)
+                    if it:
+                        it.setData(_BIRTHDAY_ROLE, True)
+                # Columna acciones: item dummy para que el delegate pinte el fondo
+                marker = QTableWidgetItem()
+                marker.setData(_BIRTHDAY_ROLE, True)
+                self.tabla.setItem(i, 5, marker)
 
             # Botones de acciones
             acciones_widget = QWidget()
+            # Siempre transparente: el delegate pinta el fondo crema por debajo
             acciones_widget.setStyleSheet("background: transparent; border: none;")
             acciones_layout = QHBoxLayout(acciones_widget)
             acciones_layout.setContentsMargins(4, 4, 4, 4)

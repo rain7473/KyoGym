@@ -5,10 +5,11 @@ Aplicación de escritorio para Windows
 import sys
 import os
 import ctypes
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                                QHBoxLayout, QPushButton, QStackedWidget, QLabel, QFrame,
-                               QDialog, QMessageBox, QGraphicsDropShadowEffect)
-from PySide6.QtCore import Qt, QTimer, QPoint
+                               QDialog, QMessageBox, QGraphicsDropShadowEffect,
+                               QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView)
+from PySide6.QtCore import Qt, QTimer, QPoint, QObject, QEvent, Signal
 from PySide6.QtGui import QFont, QIcon, QPixmap, QColor
 
 # Inicializar base de datos
@@ -25,6 +26,161 @@ from views.inventario_view import InventarioView
 from views.finanzas_view import FinanzasView
 from views.configuracion_view import ConfiguracionView
 from services import cliente_service
+
+
+# ─────────────────────── BARCODE EVENT FILTER ────────────────────
+
+class BarcodeEventFilter(QObject):
+    """Filtro global que captura input de pistola lectora de códigos de barras.
+
+    Las pistolas lectoras envían caracteres muy rápido (< 50 ms entre teclas)
+    y terminan con Enter. Este filtro acumula esos caracteres y, al recibir
+    Enter, emite la señal `codigo_detectado` si el buffer tiene al menos 3
+    caracteres y llegaron todos en menos de 100 ms/carácter en promedio.
+    """
+    codigo_detectado = Signal(str)
+
+    # Tiempo máximo (ms) entre pulsaciones para considerar input del escáner
+    _MAX_GAP_MS = 80
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._buffer = ""
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._reset_buffer)
+
+    def _reset_buffer(self):
+        self._buffer = ""
+
+    def eventFilter(self, obj, event):
+        if event.type() != QEvent.KeyPress:
+            return False
+
+        key = event.key()
+        text = event.text()
+
+        if key in (Qt.Key_Return, Qt.Key_Enter):
+            code = self._buffer.strip()
+            self._buffer = ""
+            self._timer.stop()
+            if len(code) >= 3:
+                self.codigo_detectado.emit(code)
+            return False  # no consumir Enter
+
+        if text and text.isprintable():
+            self._buffer += text
+            # Reiniciar timer: si no llega otro carácter pronto, limpiar buffer
+            self._timer.start(self._MAX_GAP_MS * 5)
+
+        return False
+
+
+# ─────────────────────── ASIGNAR CÓDIGO DIALOG ───────────────────
+
+class AsignarCodigoDialog(QDialog):
+    """Muestra la lista de clientes sin código de barras asignado
+    para que el usuario elija a quién asignarle el código escaneado."""
+
+    def __init__(self, codigo_escaneado: str, parent=None):
+        super().__init__(parent)
+        self.codigo_escaneado = codigo_escaneado
+        self.cliente_seleccionado = None
+        self.setWindowTitle("Asignar código de barras")
+        self.setMinimumSize(520, 400)
+        self._build_ui()
+        self._cargar_clientes()
+
+    def _build_ui(self):
+        self.setStyleSheet("""
+            QDialog { background:#f5f7fa; }
+            QLabel  { color:#1a2e45; font-size:13px; }
+            QTableWidget { background:#ffffff; border:1px solid #d0d8e4;
+                           border-radius:6px; gridline-color:#e8edf2; }
+            QHeaderView::section { background:#1a2e45; color:#ffffff;
+                                   padding:6px; border:none; font-weight:bold; }
+            QPushButton { padding:9px 22px; border-radius:6px; font-size:13px;
+                          font-weight:bold; border:none; }
+        """)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(20, 18, 20, 18)
+        lay.setSpacing(12)
+
+        info = QLabel(
+            f"Código escaneado: <b style='font-family:monospace'>{self.codigo_escaneado}</b><br>"
+            "El código no está asignado a ningún cliente.<br>"
+            "Selecciona el cliente al que deseas asignárselo:")
+        info.setWordWrap(True)
+        info.setStyleSheet(
+            "background:#e8f0fa; border-radius:6px; padding:10px 14px;"
+            " color:#1a3a5c; font-size:12px;")
+        lay.addWidget(info)
+
+        self._tabla = QTableWidget()
+        self._tabla.setColumnCount(3)
+        self._tabla.setHorizontalHeaderLabels(["ID", "Nombre", "Teléfono"])
+        self._tabla.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self._tabla.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        self._tabla.setColumnWidth(0, 55)
+        self._tabla.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        self._tabla.setColumnWidth(2, 120)
+        self._tabla.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._tabla.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._tabla.setSelectionMode(QAbstractItemView.SingleSelection)
+        self._tabla.verticalHeader().setVisible(False)
+        self._tabla.setAlternatingRowColors(True)
+        self._tabla.doubleClicked.connect(self._on_aceptar)
+        lay.addWidget(self._tabla)
+
+        btns = QHBoxLayout()
+        btns.setSpacing(10)
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setCursor(Qt.PointingHandCursor)
+        btn_cancel.setStyleSheet(
+            "QPushButton { background:#e2e8f0; color:#334155; }"
+            "QPushButton:hover { background:#cbd5e1; }")
+        btn_cancel.clicked.connect(self.reject)
+        btn_asignar = QPushButton("Asignar código")
+        btn_asignar.setCursor(Qt.PointingHandCursor)
+        btn_asignar.setDefault(True)
+        btn_asignar.setStyleSheet(
+            "QPushButton { background:#2c6fad; color:#ffffff; }"
+            "QPushButton:hover { background:#1e5a91; }")
+        btn_asignar.clicked.connect(self._on_aceptar)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_asignar)
+        lay.addLayout(btns)
+
+    def _cargar_clientes(self):
+        from services import cliente_service
+        from db import get_connection
+        conn = get_connection()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, nombre, telefono FROM clientes
+            WHERE activo=1 AND (codigo_barras IS NULL OR codigo_barras='')
+            ORDER BY nombre COLLATE NOCASE
+        """)
+        rows = cur.fetchall()
+        conn.close()
+        self._tabla.setRowCount(len(rows))
+        for i, row in enumerate(rows):
+            self._tabla.setRowHeight(i, 32)
+            for j, val in enumerate([str(row[0]), row[1] or "—", row[2] or "—"]):
+                item = QTableWidgetItem(val)
+                self._tabla.setItem(i, j, item)
+
+    def _on_aceptar(self):
+        sel = self._tabla.selectedItems()
+        if not sel:
+            QMessageBox.warning(self, "Selección requerida",
+                                "Por favor selecciona un cliente de la lista.")
+            return
+        fila = self._tabla.currentRow()
+        cliente_id = int(self._tabla.item(fila, 0).text())
+        nombre = self._tabla.item(fila, 1).text()
+        self.cliente_seleccionado = {"id": cliente_id, "nombre": nombre}
+        self.accept()
 
 
 class BirthdayToast(QFrame):
@@ -183,6 +339,11 @@ class MainWindow(QMainWindow):
         self.ir_a_inicio()
         self._toasts_activos = []
         QTimer.singleShot(700, self.mostrar_notificacion_cumpleanos)
+
+        # Instalar filtro global de escáner de códigos de barras
+        self._barcode_filter = BarcodeEventFilter(self)
+        QApplication.instance().installEventFilter(self._barcode_filter)
+        self._barcode_filter.codigo_detectado.connect(self._procesar_codigo_barras)
     
     def init_ui(self):
         """Inicializa la interfaz de usuario"""
@@ -306,7 +467,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.btn_pagos)
         layout.addWidget(self.btn_inventario)
         layout.addWidget(self.btn_finanzas)
-        
+
         # Espacio flexible
         layout.addStretch()
         
@@ -452,6 +613,86 @@ class MainWindow(QMainWindow):
             self.inventario_view.cargar_datos()
         elif indice == 5:
             self.finanzas_view.cargar_datos()
+
+    def _procesar_codigo_barras(self, codigo: str):
+        """Procesa un código detectado por el escáner global."""
+        from datetime import date as _date
+        from services import cliente_service as _cs, asistencia_service as _as
+        from services.membresia_service import obtener_membresia_activa
+        from utils.constants import ESTADO_ACTIVA, ESTADO_POR_VENCER
+
+        cliente = _cs.buscar_por_codigo_barras(codigo)
+
+        if not cliente:
+            # ── Código no asignado: ofrecer asignarlo ─────────────
+            dlg_asignar = AsignarCodigoDialog(codigo, self)
+            if dlg_asignar.exec() == QDialog.Accepted and dlg_asignar.cliente_seleccionado:
+                sel = dlg_asignar.cliente_seleccionado
+                ok, err = _cs.actualizar_codigo_barras(sel["id"], codigo)
+                if ok:
+                    QMessageBox.information(
+                        self, "Código asignado",
+                        f"Código <b>{codigo}</b> asignado a <b>{sel['nombre']}</b> correctamente.")
+                else:
+                    QMessageBox.warning(self, "Error al asignar", err)
+            return
+
+        cliente_id = cliente["id"]
+        nombre = cliente["nombre"]
+
+        # ── Verificar membresía ────────────────────────────────────
+        membresia = obtener_membresia_activa(cliente_id)
+        tiene_membresia_activa = (
+            membresia is not None and
+            membresia.get("estado") in (ESTADO_ACTIVA, ESTADO_POR_VENCER)
+        )
+
+        abrir_perfil = True
+        if tiene_membresia_activa:
+            hoy = _date.today()
+            if _as.tiene_asistencia(cliente_id, hoy):
+                msg = QMessageBox(self)
+                msg.setWindowTitle("Asistencia ya registrada")
+                msg.setIcon(QMessageBox.Information)
+                msg.setText(
+                    f"<b>{nombre}</b><br>"
+                    f"La asistencia de hoy ya fue registrada.")
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.exec()
+            else:
+                ok, _ = _as.registrar_asistencia(cliente_id, fecha=hoy, origen="escaner")
+                if ok:
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("Asistencia registrada")
+                    msg.setIcon(QMessageBox.NoIcon)
+                    msg.setText(
+                        f"✅  <b>{nombre}</b><br>"
+                        f"Asistencia registrada correctamente.")
+                    msg.setStyleSheet(
+                        "QMessageBox { background:#f0faf5; }"
+                        "QLabel { color:#155724; font-size:13px; }")
+                    msg.setStandardButtons(QMessageBox.Ok)
+                    msg.exec()
+        else:
+            estado = membresia.get("estado", "Vencida") if membresia else "Sin membresía"
+            msg = QMessageBox(self)
+            msg.setWindowTitle("Membresía inactiva")
+            msg.setIcon(QMessageBox.Warning)
+            msg.setText(
+                f"<b>{nombre}</b><br>"
+                f"Estado de membresía: <b>{estado}</b><br><br>"
+                f"No se registra asistencia. ¿Desea abrir el perfil del cliente?")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.Yes)
+            abrir_perfil = (msg.exec() == QMessageBox.Yes)
+
+        if abrir_perfil:
+            try:
+                from views.perfil_cliente_view import PerfilClienteDialog
+                dlg = PerfilClienteDialog(cliente_id, self)
+                dlg.exec()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo abrir el perfil: {e}")
 
 
 def main():

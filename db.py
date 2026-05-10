@@ -160,6 +160,17 @@ def init_database():
         pass  # Ya existe
 
     try:
+        cursor.execute("ALTER TABLE clientes ADD COLUMN codigo_barras TEXT")
+    except Exception:
+        pass  # Ya existe
+
+    # Índice único para código de barras (ignora NULLs)
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_codigo_barras
+        ON clientes(codigo_barras) WHERE codigo_barras IS NOT NULL
+    """)
+
+    try:
         cursor.execute("ALTER TABLE inventario ADD COLUMN stock_minimo INTEGER DEFAULT 0")
     except Exception:
         pass  # Ya existe

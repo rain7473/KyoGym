@@ -181,7 +181,7 @@ class RegistrarPagoDialog(QDialog):
         
         # Método de pago
         self.metodo = QComboBox()
-        self.metodo.addItems(["Efectivo", "Tarjeta", "Transferencia", "Otro"])
+        self.metodo.addItems(["Yappy", "Efectivo", "Transferencia", "Tarjeta", "Otro"])
         layout.addRow("Método:", self.metodo)
 
         # ─── Items del pago ──────────────────────────────────────

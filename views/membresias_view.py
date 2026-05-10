@@ -165,7 +165,7 @@ class AgregarMembresiaDialog(QDialog):
 
         # Método de pago (solo aplica al crear, ya que la edición no modifica el pago asociado)
         self.combo_metodo_pago = QComboBox()
-        self.combo_metodo_pago.addItems(["Efectivo", "Tarjeta", "Transferencia", "Otro"])
+        self.combo_metodo_pago.addItems(["Yappy", "Efectivo", "Transferencia", "Tarjeta", "Otro"])
         if self.membresia:
             self.combo_metodo_pago.setEnabled(False)
         layout.addRow("Método de pago:", self.combo_metodo_pago)

@@ -493,7 +493,7 @@ class FinanzasView(QWidget):
         form_layout.addRow("Proveedor:", self.eg_proveedor)
 
         self.eg_metodo = QComboBox()
-        self.eg_metodo.addItems(["Efectivo", "Tarjeta", "Transferencia", "Otro"])
+        self.eg_metodo.addItems(["Yappy", "Efectivo", "Transferencia", "Tarjeta", "Otro"])
         self.eg_metodo.setStyleSheet(_ESTILO_COMBO)
         form_layout.addRow("Método:", self.eg_metodo)
 

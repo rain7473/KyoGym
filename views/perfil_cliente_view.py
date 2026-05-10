@@ -8,16 +8,20 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QFrame, QScrollArea, QTableWidget,
     QTableWidgetItem, QHeaderView, QSizePolicy, QTextEdit,
     QMessageBox, QCalendarWidget, QAbstractItemView,
-    QGraphicsDropShadowEffect
+    QGraphicsDropShadowEffect, QLineEdit
 )
 from PySide6.QtCore import Qt, QDate, QRect, QSize
 from PySide6.QtGui import (QFont, QColor, QPainter, QBrush, QPen, QPalette)
 import qtawesome as qta
 
-from services import perfil_cliente_service, asistencia_service
+from pathlib import Path
+
+from services import perfil_cliente_service, asistencia_service, cliente_service
 from services.membresia_service import (calcular_estado_membresia,
                                         listar_membresias)
 from utils.constants import ESTADO_ACTIVA, ESTADO_POR_VENCER, ESTADO_VENCIDA
+from utils.factura_generator import generar_factura_pago, generar_factura_membresia, abrir_factura
+from utils.iconos_ui import crear_boton_icono, crear_widget_centrado
 from utils.table_styles import aplicar_estilo_tabla_moderna
 
 
@@ -381,6 +385,105 @@ def _sep():
     return line
 
 
+# ─────────────────────── EDIT BARCODE DIALOG ─────────────────────
+
+class EditBarcodeDialog(QDialog):
+    """Diálogo para editar o asignar un código de barras físico a un cliente."""
+
+    def __init__(self, cliente_id: int, codigo_actual: str | None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Editar Código de Barras")
+        self.setMinimumWidth(420)
+        self._codigo_actual = codigo_actual
+        self._cliente_id = cliente_id
+        self._build_ui()
+
+    def _build_ui(self):
+        self.setStyleSheet("""
+            QDialog { background:#f5f7fa; }
+            QLabel  { color:#1a2e45; font-size:13px; }
+            QLineEdit {
+                padding:9px 12px; border:2px solid #d0d8e4; border-radius:6px;
+                background:#ffffff; color:#1a1a2e; font-size:14px;
+                font-family: monospace; letter-spacing:1px;
+            }
+            QLineEdit:focus { border-color:#2c6fad; }
+            QPushButton {
+                padding:9px 22px; border-radius:6px; font-size:13px;
+                font-weight:bold; border:none;
+            }
+        """)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(24, 20, 24, 20)
+        lay.setSpacing(14)
+
+        # Instrucción
+        lbl_info = QLabel(
+            "Escanea la tarjeta física con la pistola lectora\n"
+            "o escribe el código manualmente y pulsa Guardar.")
+        lbl_info.setWordWrap(True)
+        lbl_info.setStyleSheet(
+            "color:#4a5568; font-size:12px; background:#e8f0fa;"
+            " border-radius:6px; padding:8px 12px;")
+        lay.addWidget(lbl_info)
+
+        # Campo de código
+        lbl = QLabel("Código de barras:")
+        lay.addWidget(lbl)
+        self._input = QLineEdit()
+        self._input.setPlaceholderText("Escanea aquí o escribe el código…")
+        if self._codigo_actual:
+            self._input.setText(self._codigo_actual)
+        self._input.selectAll()
+        lay.addWidget(self._input)
+
+        # Código actual
+        codigo_auto = f"CL-{int(self._cliente_id):06d}"
+        lbl_actual = QLabel(
+            f"Código automático: <b>{codigo_auto}</b>"
+            + (f"   |   Código actual: <b>{self._codigo_actual}</b>"
+               if self._codigo_actual else ""))
+        lbl_actual.setStyleSheet("color:#64748b; font-size:11px;")
+        lay.addWidget(lbl_actual)
+
+        # Botón limpiar (volver al automático)
+        btn_limpiar = QPushButton("Usar código automático")
+        btn_limpiar.setCursor(Qt.PointingHandCursor)
+        btn_limpiar.setStyleSheet(
+            "QPushButton { background:#f1f5f9; color:#475569; border:1px solid #d0d8e4; }"
+            "QPushButton:hover { background:#e2e8f0; }")
+        btn_limpiar.clicked.connect(lambda: self._input.clear())
+        lay.addWidget(btn_limpiar)
+
+        # Botones OK / Cancelar
+        btns = QHBoxLayout()
+        btns.setSpacing(10)
+        btn_cancel = QPushButton("Cancelar")
+        btn_cancel.setCursor(Qt.PointingHandCursor)
+        btn_cancel.setStyleSheet(
+            "QPushButton { background:#e2e8f0; color:#334155; }"
+            "QPushButton:hover { background:#cbd5e1; }")
+        btn_cancel.clicked.connect(self.reject)
+        btn_save = QPushButton("Guardar")
+        btn_save.setCursor(Qt.PointingHandCursor)
+        btn_save.setDefault(True)
+        btn_save.setStyleSheet(
+            "QPushButton { background:#2c6fad; color:#ffffff; }"
+            "QPushButton:hover { background:#1e5a91; }")
+        btn_save.clicked.connect(self.accept)
+        btns.addWidget(btn_cancel)
+        btns.addWidget(btn_save)
+        lay.addLayout(btns)
+
+        # Foco en el campo para que la pistola pueda escribir directamente
+        self._input.setFocus()
+
+    def get_codigo(self) -> str | None:
+        """Devuelve el código ingresado (o None si se vació para usar el automático)."""
+        txt = self._input.text().strip()
+        return txt if txt else None
+
+
 # ─────────────────────── DIALOG PRINCIPAL ────────────────────────
 
 class PerfilClienteDialog(QDialog):
@@ -664,7 +767,27 @@ class PerfilClienteDialog(QDialog):
         lay = QVBoxLayout(card)
         lay.setContentsMargins(16, 14, 16, 14)
         lay.setSpacing(8)
-        lay.addWidget(_card_title("Código de Barras", "fa5s.barcode", _COLOR_TEXT_PRI))
+
+        # Título + botón editar en la misma fila
+        top_row = QHBoxLayout()
+        top_row.setSpacing(6)
+        top_row.addWidget(_card_title("Código de Barras", "fa5s.barcode", _COLOR_TEXT_PRI))
+        top_row.addStretch()
+        btn_editar_barcode = QPushButton()
+        btn_editar_barcode.setCursor(Qt.PointingHandCursor)
+        btn_editar_barcode.setToolTip("Editar / Asignar código de tarjeta física")
+        btn_editar_barcode.setFixedSize(28, 28)
+        try:
+            btn_editar_barcode.setIcon(qta.icon("fa5s.pencil-alt", color="#2c6fad"))
+        except Exception:
+            btn_editar_barcode.setText("✎")
+        btn_editar_barcode.setStyleSheet(
+            "QPushButton { background:transparent; border:1px solid #d0d8e4;"
+            " border-radius:5px; } QPushButton:hover { background:#e8f0fa; }")
+        btn_editar_barcode.clicked.connect(self._on_editar_codigo_barras)
+        top_row.addWidget(btn_editar_barcode)
+        lay.addLayout(top_row)
+
         lay.addWidget(_sep())
         self._barcode_widget = BarcodeWidget("CL-000000")
         lay.addWidget(self._barcode_widget, alignment=Qt.AlignCenter)
@@ -1177,10 +1300,12 @@ class PerfilClienteDialog(QDialog):
         ct_lay.addWidget(_card_title("Historial de Pagos", "fa5s.credit-card", _COLOR_AZUL))
         ct_lay.addWidget(_sep())
         self._tabla_pagos = QTableWidget()
-        self._tabla_pagos.setColumnCount(6)
+        self._tabla_pagos.setColumnCount(7)
         self._tabla_pagos.setHorizontalHeaderLabels(
-            ["Fecha", "Concepto", "Monto", "Método", "Membresía", "Venc. Membresía"])
+            ["Fecha", "Concepto", "Monto", "Método", "Membresía", "Venc. Membresía", "Factura"])
         self._tabla_pagos.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._tabla_pagos.horizontalHeader().setSectionResizeMode(6, QHeaderView.Fixed)
+        self._tabla_pagos.setColumnWidth(6, 80)
         self._tabla_pagos.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._tabla_pagos.setSelectionMode(QAbstractItemView.NoSelection)
         self._tabla_pagos.setAlternatingRowColors(False)
@@ -1216,10 +1341,12 @@ class PerfilClienteDialog(QDialog):
         c_lay.addLayout(top)
         c_lay.addWidget(_sep())
         self._tabla_membresias = QTableWidget()
-        self._tabla_membresias.setColumnCount(5)
+        self._tabla_membresias.setColumnCount(6)
         self._tabla_membresias.setHorizontalHeaderLabels(
-            ["Tipo", "Estado", "Inicio", "Vencimiento", "Monto"])
+            ["Tipo", "Estado", "Inicio", "Vencimiento", "Monto", "Factura"])
         self._tabla_membresias.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self._tabla_membresias.horizontalHeader().setSectionResizeMode(5, QHeaderView.Fixed)
+        self._tabla_membresias.setColumnWidth(5, 80)
         self._tabla_membresias.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self._tabla_membresias.setSelectionMode(QAbstractItemView.NoSelection)
         self._tabla_membresias.setAlternatingRowColors(False)
@@ -1315,7 +1442,9 @@ class PerfilClienteDialog(QDialog):
     def _poblar_col_izq(self):
         r = self._resumen
         cid = r.get("id") or self.cliente_id
-        codigo = f"CL-{int(cid):06d}"
+        # Usar código físico si existe, o el automático
+        codigo_auto = f"CL-{int(cid):06d}"
+        codigo = r.get("codigo_barras") or codigo_auto
         self._barcode_widget._codigo = codigo.upper()
         self._barcode_widget.update()
         self._lbl_codigo_texto.setText(codigo)
@@ -1606,6 +1735,13 @@ class PerfilClienteDialog(QDialog):
                          _COLOR_TEXT_SEC if col in (4, 5) else _COLOR_TEXT_PRI)
                 item.setForeground(QColor(color))
                 t.setItem(i, col, item)
+            # Botón Ver Factura
+            pago_con_cliente = dict(p)
+            pago_con_cliente['cliente_id'] = self.cliente_id
+            btn_ver_factura = crear_boton_icono("see.svg", "#9b59b6", "#8e44ad", "Ver Factura")
+            btn_ver_factura.clicked.connect(
+                lambda checked, pago=pago_con_cliente: self._ver_factura_pago(pago))
+            t.setCellWidget(i, 6, crear_widget_centrado(btn_ver_factura))
 
     def _recargar_tab_membresias(self):
         membresias = listar_membresias(cliente_id=self.cliente_id)
@@ -1628,8 +1764,49 @@ class PerfilClienteDialog(QDialog):
                 else:
                     item.setForeground(QColor(_COLOR_TEXT_PRI))
                 t.setItem(i, col, item)
+            # Botón Ver Factura
+            btn_ver_factura = crear_boton_icono("see.svg", "#9b59b6", "#8e44ad", "Ver Factura")
+            btn_ver_factura.clicked.connect(
+                lambda checked, memb=m: self._ver_factura_membresia(memb))
+            t.setCellWidget(i, 5, crear_widget_centrado(btn_ver_factura))
+
+    # ─── FACTURAS ─────────────────────────────────────────────────
+
+    def _ver_factura_pago(self, pago):
+        """Abre la factura de un pago"""
+        try:
+            cli = cliente_service.obtener_cliente(pago['cliente_id'])
+            ruta = Path.home() / "KyoGym" / "Facturas" / f"Factura_Pago_{pago['id']}.pdf"
+            if not ruta.exists():
+                ruta = generar_factura_pago(pago, cli)
+            abrir_factura(str(ruta))
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo abrir la factura: {e}")
+
+    def _ver_factura_membresia(self, membresia):
+        """Abre la factura de una membresía"""
+        try:
+            cli = cliente_service.obtener_cliente(membresia['cliente_id'])
+            ruta = Path.home() / "KyoGym" / "Facturas" / f"Factura_{membresia['id']}.pdf"
+            if not ruta.exists():
+                ruta = generar_factura_membresia(membresia, cli)
+            abrir_factura(str(ruta))
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"No se pudo abrir la factura: {e}")
 
     # ─── ACCIONES ─────────────────────────────────────────────────
+
+    def _on_editar_codigo_barras(self):
+        """Abre el diálogo para editar/asociar un código de barras físico."""
+        dlg = EditBarcodeDialog(self.cliente_id, self._resumen.get("codigo_barras"), self)
+        if dlg.exec():
+            nuevo = dlg.get_codigo()
+            ok, err = cliente_service.actualizar_codigo_barras(self.cliente_id, nuevo)
+            if ok:
+                self._resumen = perfil_cliente_service.obtener_resumen_cliente(self.cliente_id)
+                self._poblar_col_izq()
+            else:
+                QMessageBox.warning(self, "Código duplicado", err)
 
     def _on_registrar_pago(self):
         try:

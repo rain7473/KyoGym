@@ -212,6 +212,23 @@ class AgregarClienteDialog(QDialog):
         botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         botones.accepted.connect(self.aceptar)
         botones.rejected.connect(self.reject)
+        btn_cancel = botones.button(QDialogButtonBox.Cancel)
+        if btn_cancel:
+            btn_cancel.setStyleSheet("""
+                QPushButton {
+                    background-color: #e74c3c;
+                    color: white;
+                    padding: 8px 20px;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 13px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #c0392b;
+                }
+            """)
         layout.addRow(botones)
         
         self.setLayout(layout)

@@ -359,27 +359,24 @@ def delete_user(username: str) -> bool:
         conn.close()
 
 
-def ensure_default_user():
-    """Crea un usuario por defecto si no existe ninguno."""
+def has_any_user() -> bool:
+    """Retorna True si existe al menos un usuario activo en la base de datos."""
     conn = get_connection()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT COUNT(1) as cnt FROM sqlite_master WHERE type='table' AND name='usuarios'")
-        # si tabla usuarios no existe, nada que hacer aquí (init_database la crea)
-        cur.execute("SELECT COUNT(1) as cnt FROM usuarios")
+        cur.execute("SELECT COUNT(1) as cnt FROM usuarios WHERE active = 1")
         row = cur.fetchone()
-        if row and row['cnt'] == 0:
-            # Crear usuario por defecto
-            create_user('zahir', 'kaiser2026', full_name='Zahir Lay', role='admin')
-            print('Usuario por defecto creado: zahir / kaiser2026')
+        return bool(row and row['cnt'] > 0)
     except Exception:
-        # si algo falla, intentar crear el usuario directamente
-        try:
-            create_user('zahir', 'kaiser2026', full_name='Zahir Lay', role='admin')
-        except Exception:
-            pass
+        return False
     finally:
         conn.close()
+
+
+def ensure_default_user():
+    """Mantenida por compatibilidad. No hace nada; el primer usuario
+    se crea mediante el diálogo de configuración inicial."""
+    pass
 
 
 if __name__ == "__main__":

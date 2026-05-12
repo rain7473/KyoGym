@@ -184,6 +184,23 @@ class AgregarMembresiaDialog(QDialog):
         botones = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         botones.accepted.connect(self.aceptar)
         botones.rejected.connect(self.reject)
+        btn_cancel = botones.button(QDialogButtonBox.Cancel)
+        if btn_cancel:
+            btn_cancel.setStyleSheet("""
+                QPushButton {
+                    background-color: #e74c3c;
+                    color: white;
+                    padding: 8px 20px;
+                    border: none;
+                    border-radius: 4px;
+                    font-weight: bold;
+                    font-size: 13px;
+                    min-width: 80px;
+                }
+                QPushButton:hover {
+                    background-color: #c0392b;
+                }
+            """)
         layout.addRow(botones)
         
         self.setLayout(layout)
@@ -864,6 +881,27 @@ class MembresiasView(QWidget):
                         background-color: #3d5166;
                     }
                 """)
+                btn_si = respuesta_msg.button(QMessageBox.Yes)
+                if btn_si:
+                    btn_si.setText("Si")
+
+                btn_no = respuesta_msg.button(QMessageBox.No)
+                if btn_no:
+                    btn_no.setStyleSheet("""
+                        QPushButton {
+                            background-color: #e74c3c;
+                            color: white;
+                            padding: 8px 20px;
+                            border: none;
+                            border-radius: 4px;
+                            font-weight: bold;
+                            font-size: 13px;
+                            min-width: 80px;
+                        }
+                        QPushButton:hover {
+                            background-color: #c0392b;
+                        }
+                    """)
                 respuesta = respuesta_msg.exec()
                 
                 if respuesta == QMessageBox.Yes:

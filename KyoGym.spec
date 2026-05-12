@@ -1,12 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from PyInstaller.utils.hooks import collect_data_files, copy_metadata
+
+
+qtawesome_datas = collect_data_files('qtawesome') + copy_metadata('qtawesome')
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets', 'assets')],
-    hiddenimports=['PySide6.QtCharts', 'PySide6.QtSvg', 'PySide6.QtSvgWidgets', 'reportlab', 'openpyxl', 'msal', 'requests'],
+    datas=[('assets', 'assets'), *qtawesome_datas],
+    hiddenimports=['PySide6.QtCharts', 'PySide6.QtSvg', 'PySide6.QtSvgWidgets', 'reportlab', 'openpyxl', 'msal', 'requests', 'qtawesome', 'qtpy'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

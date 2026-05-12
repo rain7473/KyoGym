@@ -13,9 +13,9 @@ from PySide6.QtCore import Qt, QTimer, QPoint, QObject, QEvent, Signal
 from PySide6.QtGui import QFont, QIcon, QPixmap, QColor
 
 # Inicializar base de datos
-from db import init_database, ensure_default_user, verify_user, get_user_role, get_user_fullname
+from db import init_database, ensure_default_user, verify_user, get_user_role, get_user_fullname, has_any_user
 from usuario_activo import obtener_usuario_activo, guardar_usuario_activo
-from views.login_view import LoginDialog
+from views.login_view import LoginDialog, PrimeraVezDialog
 
 # Importar vistas
 from views.dashboard_view import DashboardView
@@ -738,7 +738,13 @@ def main():
     
     # Inicializar base de datos y crear usuario por defecto si es necesario
     init_database()
-    ensure_default_user()
+
+    # Primera ejecución: no hay usuarios → pedir crear admin
+    if not has_any_user():
+        setup = PrimeraVezDialog()
+        setup.show()
+        if setup.exec() != QDialog.Accepted:
+            sys.exit(0)
 
     # Mostrar diálogo de login en tamaño fijo
     login = LoginDialog()

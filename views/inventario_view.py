@@ -325,6 +325,7 @@ class InventarioView(QWidget):
     def __init__(self):
         super().__init__()
         self.filtro_categoria = None
+        self.filtro_bajo_stock = False
         self.init_ui()
         self.cargar_datos()
     
@@ -432,6 +433,34 @@ class InventarioView(QWidget):
             self.botones_categoria[cat] = btn
         
         filtros_layout.addStretch()
+
+        # Botón Bajo Stock
+        self.btn_bajo_stock = QPushButton("⚠ Bajo Stock")
+        self.btn_bajo_stock.setCheckable(True)
+        self.btn_bajo_stock.setChecked(False)
+        self.btn_bajo_stock.clicked.connect(self._toggle_bajo_stock)
+        self.btn_bajo_stock.setStyleSheet("""
+            QPushButton {
+                background-color: #eeeeee;
+                color: #555555;
+                padding: 8px 16px;
+                border: 2px solid #d0d0d0;
+                border-radius: 5px;
+                font-size: 13px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #fde8cc;
+                border: 2px solid #f39c12;
+                color: #c87f0a;
+            }
+            QPushButton:checked {
+                background-color: #fde8cc;
+                border: 2px solid #f39c12;
+                color: #c87f0a;
+            }
+        """)
+        filtros_layout.addWidget(self.btn_bajo_stock)
         
         layout.addLayout(filtros_layout)
         
@@ -457,7 +486,11 @@ class InventarioView(QWidget):
     def cargar_datos(self):
         """Carga los productos en la tabla"""
         buscar = self.buscar_input.text() if hasattr(self, 'buscar_input') else ""
-        productos = inventario_service.listar_productos(buscar=buscar, categoria=self.filtro_categoria)
+        productos = inventario_service.listar_productos(
+            buscar=buscar,
+            categoria=self.filtro_categoria,
+            bajo_stock=self.filtro_bajo_stock
+        )
 
         sorting_enabled = self.tabla.isSortingEnabled()
         self.tabla.setSortingEnabled(False)
@@ -513,6 +546,11 @@ class InventarioView(QWidget):
 
         self.tabla.setSortingEnabled(sorting_enabled)
     
+    def _toggle_bajo_stock(self):
+        """Activa/desactiva el filtro de bajo stock"""
+        self.filtro_bajo_stock = self.btn_bajo_stock.isChecked()
+        self.cargar_datos()
+
     def cambiar_filtro_categoria(self, categoria, boton_activo):
         """Cambia el filtro de categoría"""
         # Desmarcar todos los botones
@@ -680,28 +718,14 @@ class InventarioView(QWidget):
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
         msg.setStyleSheet("""
-            QMessageBox {
-                background-color: #ffffff;
-            }
-            QLabel {
-                color: #2c2c2c;
-                font-size: 13px;
-                min-width: 300px;
-            }
-            QPushButton {
-                background-color: #2c3e50;
-                color: white;
-                padding: 8px 20px;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #3d5166;
-            }
+            QMessageBox { background-color: #ffffff; }
+            QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }
         """)
+        btn_si = msg.button(QMessageBox.Yes)
+        btn_si.setText("Sí")
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.button(QMessageBox.No)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         respuesta = msg.exec()
         
         if respuesta == QMessageBox.Yes:

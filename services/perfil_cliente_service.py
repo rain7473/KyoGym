@@ -107,6 +107,7 @@ def obtener_resumen_cliente(cliente_id):
         "email": cliente.get("email", ""),
         "fecha_nacimiento": cliente.get("fecha_nacimiento"),
         "fecha_registro": cliente.get("fecha_registro"),
+        "codigo_barras": cliente.get("codigo_barras"),
         # membresía
         "estado_membresia": estado_membresia,
         "plan_actual": plan_actual,

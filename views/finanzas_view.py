@@ -969,11 +969,16 @@ class FinanzasView(QWidget):
 
     def _eliminar_ingreso(self, pago_id):
         msg = QMessageBox(self)
-        msg.setWindowTitle("Confirmar")
+        msg.setWindowTitle("Confirmar eliminación")
         msg.setText("¿Eliminar este ingreso?")
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
-        msg.setStyleSheet(_MSG_SS)
+        msg.setStyleSheet("QMessageBox { background-color:#ffffff; } QLabel { color:#2c2c2c; font-size:13px; min-width:280px; }")
+        btn_si = msg.button(QMessageBox.Yes)
+        btn_si.setText("Sí")
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.button(QMessageBox.No)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         if msg.exec() == QMessageBox.Yes:
             try:
                 from services import pago_service
@@ -1075,11 +1080,16 @@ class FinanzasView(QWidget):
 
     def _eliminar_egreso(self, egreso_id):
         msg = QMessageBox(self)
-        msg.setWindowTitle("Confirmar")
+        msg.setWindowTitle("Confirmar eliminación")
         msg.setText("¿Eliminar este gasto?")
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
-        msg.setStyleSheet(_MSG_SS)
+        msg.setStyleSheet("QMessageBox { background-color:#ffffff; } QLabel { color:#2c2c2c; font-size:13px; min-width:280px; }")
+        btn_si = msg.button(QMessageBox.Yes)
+        btn_si.setText("Sí")
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.button(QMessageBox.No)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         if msg.exec() == QMessageBox.Yes:
             try:
                 finanzas_service.eliminar_egreso(egreso_id)

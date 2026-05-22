@@ -641,11 +641,23 @@ class MembresiasView(QWidget):
         self.tabla.setSortingEnabled(True)
         self.tabla.setAlternatingRowColors(False)
         aplicar_estilo_tabla_moderna(self.tabla)
+        self.tabla.cellDoubleClicked.connect(self._on_tabla_double_click)
         
         layout.addWidget(self.tabla)
         
         self.setLayout(layout)
     
+    def _on_tabla_double_click(self, row, col):
+        """Abre perfil del cliente al doble click en cualquier fila."""
+        item = self.tabla.item(row, 0)
+        if item:
+            cliente_id = item.data(Qt.UserRole)
+            if cliente_id:
+                from views.perfil_cliente_view import PerfilClienteDialog
+                dlg = PerfilClienteDialog(cliente_id, parent=self)
+                dlg.exec()
+                self.cargar_datos()
+
     def cambiar_filtro(self, filtro):
         """Cambia el filtro aplicado"""
         self.filtro_actual = filtro
@@ -709,6 +721,7 @@ class MembresiasView(QWidget):
             # Cliente - color negro
             cliente_item = QTableWidgetItem(membresia['cliente_nombre'])
             cliente_item.setForeground(QColor("#1a1a1a"))
+            cliente_item.setData(Qt.UserRole, membresia['cliente_id'])
             self.tabla.setItem(i, 0, cliente_item)
             
             # Teléfono - color negro
@@ -855,56 +868,18 @@ class MembresiasView(QWidget):
                 # Preguntar si desea ver la factura
                 respuesta_msg = QMessageBox(self)
                 respuesta_msg.setWindowTitle("Membresía Creada")
-                respuesta_msg.setText(f"Membresía creada exitosamente.\nFactura #{membresia_id} generada.\n\n¿Desea abrir la factura?")
+                respuesta_msg.setText(f"Membresía creada correctamente.\nFactura #{membresia_id} creada.\n\n¿Desea abrir la factura?")
                 respuesta_msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
                 respuesta_msg.setDefaultButton(QMessageBox.Yes)
-                respuesta_msg.setStyleSheet("""
-                    QMessageBox {
-                        background-color: #ffffff;
-                    }
-                    QLabel {
-                        color: #2c2c2c;
-                        font-size: 13px;
-                        min-width: 300px;
-                    }
-                    QPushButton {
-                        background-color: #2c3e50;
-                        color: white;
-                        padding: 8px 20px;
-                        border: none;
-                        border-radius: 4px;
-                        font-weight: bold;
-                        font-size: 13px;
-                        min-width: 80px;
-                    }
-                    QPushButton:hover {
-                        background-color: #3d5166;
-                    }
-                """)
+                respuesta_msg.setStyleSheet("QMessageBox { background-color: #ffffff; } QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }")
                 btn_si = respuesta_msg.button(QMessageBox.Yes)
                 if btn_si:
-                    btn_si.setText("Si")
-
+                    btn_si.setText("Sí")
+                    btn_si.setStyleSheet("QPushButton { background-color: #27ae60; color: white; padding: 8px 20px; border: none; border-radius: 4px; font-weight: bold; font-size: 13px; min-width: 80px; } QPushButton:hover { background-color: #229954; }")
                 btn_no = respuesta_msg.button(QMessageBox.No)
                 if btn_no:
-                    btn_no.setStyleSheet("""
-                        QPushButton {
-                            background-color: #e74c3c;
-                            color: white;
-                            padding: 8px 20px;
-                            border: none;
-                            border-radius: 4px;
-                            font-weight: bold;
-                            font-size: 13px;
-                            min-width: 80px;
-                        }
-                        QPushButton:hover {
-                            background-color: #c0392b;
-                        }
-                    """)
-                respuesta = respuesta_msg.exec()
-                
-                if respuesta == QMessageBox.Yes:
+                    btn_no.setStyleSheet("QPushButton { background-color: #e74c3c; color: white; padding: 8px 20px; border: none; border-radius: 4px; font-weight: bold; font-size: 13px; min-width: 80px; } QPushButton:hover { background-color: #c0392b; }")
+                if respuesta_msg.exec() == QMessageBox.Yes:
                     abrir_factura(ruta_factura)
                     
             except Exception as e:
@@ -1062,28 +1037,14 @@ class MembresiasView(QWidget):
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
         msg.setStyleSheet("""
-            QMessageBox {
-                background-color: #ffffff;
-            }
-            QLabel {
-                color: #2c2c2c;
-                font-size: 13px;
-                min-width: 300px;
-            }
-            QPushButton {
-                background-color: #2c3e50;
-                color: white;
-                padding: 8px 20px;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #3d5166;
-            }
+            QMessageBox { background-color: #ffffff; }
+            QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }
         """)
+        btn_si = msg.button(QMessageBox.Yes)
+        btn_si.setText("Sí")
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.button(QMessageBox.No)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         respuesta = msg.exec()
         
         if respuesta == QMessageBox.Yes:

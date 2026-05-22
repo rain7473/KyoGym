@@ -1101,8 +1101,9 @@ class PerfilClienteDialog(QDialog):
         lay.addWidget(self._frame_alerta_venc)
 
         btn_renovar = QPushButton("  Renovar Membresía")
+        self._btn_renovar_membresia = btn_renovar
         try:
-            btn_renovar.setIcon(qta.icon("fa5s.redo", color="#ffffff"))
+            btn_renovar.setIcon(qta.icon("fa5s.plus-circle", color="#ffffff"))
             btn_renovar.setIconSize(QSize(13, 13))
         except Exception:
             pass
@@ -1155,10 +1156,11 @@ class PerfilClienteDialog(QDialog):
         acciones = [
             ("fa5s.running",     "Registrar Asistencia", _COLOR_ACTIVA, self._on_registrar_asistencia),
             ("fa5s.credit-card", "Registrar Pago",        _COLOR_AZUL,   self._on_registrar_pago),
-            ("fa5s.redo",        "Renovar Membresía",     "#8e44ad",     self._on_registrar_membresia),
+            ("fa5s.plus-circle", "Renovar Membresía",     "#8e44ad",     self._on_registrar_membresia),
             ("fa5s.sticky-note", "Agregar Nota",          "#e67e22",     self._on_agregar_nota),
             ("fa5s.weight",      "Tomar Medición",        "#16a085",     lambda: None),
         ]
+        self._lbl_accion_membresia = None
         for idx_a, (qta_name, texto, color, slot) in enumerate(acciones):
             _hex_c = color.lstrip('#')
             _rc = int(_hex_c[0:2], 16)
@@ -1202,6 +1204,12 @@ class PerfilClienteDialog(QDialog):
 
             row_f.mousePressEvent = lambda e, s=slot: s()
             lay.addWidget(row_f)
+
+            # Guardar referencia al label y frame de membresía (índice 2)
+            if idx_a == 2:
+                self._lbl_accion_membresia = lbl_t
+                self._frame_accion_membresia = row_f
+
         return card
 
     # ─── TAB ASISTENCIAS ─────────────────────────────────────────
@@ -1618,6 +1626,28 @@ class PerfilClienteDialog(QDialog):
         r = self._resumen
         venc  = r.get("proximo_vencimiento")
         estado = r.get("estado_membresia", "Sin membresía")
+
+        # Ajustar texto y visibilidad del botón + acción rápida según estado
+        if estado == ESTADO_ACTIVA:
+            self._btn_renovar_membresia.setVisible(False)
+            if self._lbl_accion_membresia:
+                self._lbl_accion_membresia.setText("Ver Membresía Activa")
+            if self._frame_accion_membresia:
+                self._frame_accion_membresia.mousePressEvent = lambda e: self._switch_tab(3)
+        elif not venc:
+            self._btn_renovar_membresia.setVisible(True)
+            self._btn_renovar_membresia.setText("  Nueva Membresía")
+            if self._lbl_accion_membresia:
+                self._lbl_accion_membresia.setText("Nueva Membresía")
+            if self._frame_accion_membresia:
+                self._frame_accion_membresia.mousePressEvent = lambda e: self._on_registrar_membresia()
+        else:
+            self._btn_renovar_membresia.setVisible(True)
+            self._btn_renovar_membresia.setText("  Renovar Membresía")
+            if self._lbl_accion_membresia:
+                self._lbl_accion_membresia.setText("Renovar Membresía")
+            if self._frame_accion_membresia:
+                self._frame_accion_membresia.mousePressEvent = lambda e: self._on_registrar_membresia()
         if venc:
             self._lbl_prox_fecha.setText(_fmt_fecha(venc))
             try:
@@ -1823,12 +1853,53 @@ class PerfilClienteDialog(QDialog):
     def _on_registrar_membresia(self):
         try:
             from views.membresias_view import AgregarMembresiaDialog
+            from services import membresia_service, pago_service
             dlg = AgregarMembresiaDialog(self)
             idx = dlg.combo_cliente.findData(self.cliente_id)
             if idx >= 0:
                 dlg.combo_cliente.setCurrentIndex(idx)
-            if dlg.exec():
+            if not dlg.exec():
+                return
+            datos = dlg.obtener_datos()
+            try:
+                metodo_pago = (datos.get('metodo_pago') or "Efectivo").strip() or "Efectivo"
+                ok_pago, pago_id = pago_service.crear_pago(
+                    cliente_id=datos['cliente_id'],
+                    monto=datos['monto'],
+                    metodo=metodo_pago,
+                    fecha_pago=datos['fecha_inicio'],
+                    concepto="Pago de membresía"
+                )
+                if not ok_pago:
+                    raise Exception(f"Error al registrar el pago: {pago_id}")
+                membresia_id = membresia_service.crear_membresia(
+                    cliente_id=datos['cliente_id'],
+                    tipo=datos.get('tipo', 'Mensualidad'),
+                    fecha_inicio=datos['fecha_inicio'],
+                    monto=datos['monto'],
+                    pago_id=pago_id
+                )
+                membresia = membresia_service.obtener_membresia(membresia_id)
+                cliente = cliente_service.obtener_cliente(datos['cliente_id'])
+                ruta_factura = generar_factura_membresia(membresia, cliente)
                 self._cargar_todo()
+                respuesta_msg = QMessageBox(self)
+                respuesta_msg.setWindowTitle("Membresía Creada")
+                respuesta_msg.setText(f"Membresía creada correctamente.\nFactura #{membresia_id} creada.\n\n¿Desea abrir la factura?")
+                respuesta_msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+                respuesta_msg.setDefaultButton(QMessageBox.Yes)
+                respuesta_msg.setStyleSheet("QMessageBox { background-color: #ffffff; } QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }")
+                btn_si = respuesta_msg.button(QMessageBox.Yes)
+                if btn_si:
+                    btn_si.setText("Sí")
+                    btn_si.setStyleSheet("QPushButton { background-color: #27ae60; color: white; padding: 8px 20px; border: none; border-radius: 4px; font-weight: bold; font-size: 13px; min-width: 80px; } QPushButton:hover { background-color: #229954; }")
+                btn_no = respuesta_msg.button(QMessageBox.No)
+                if btn_no:
+                    btn_no.setStyleSheet("QPushButton { background-color: #e74c3c; color: white; padding: 8px 20px; border: none; border-radius: 4px; font-weight: bold; font-size: 13px; min-width: 80px; } QPushButton:hover { background-color: #c0392b; }")
+                if respuesta_msg.exec() == QMessageBox.Yes:
+                    abrir_factura(ruta_factura)
+            except Exception as e:
+                QMessageBox.critical(self, "Error al crear membresía", str(e))
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
 

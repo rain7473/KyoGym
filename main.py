@@ -398,6 +398,8 @@ class MainWindow(QMainWindow):
             # Mostrar dashboard por defecto (ahora btn_inicio ya existe)
             self.btn_inicio.setChecked(True)
             self.stack.setCurrentWidget(self.dashboard_view)
+            # Conectar navegación desde las cards del dashboard
+            self.dashboard_view.navegacion_solicitada.connect(self._navegar_desde_dashboard)
             print("UI inicializada correctamente")
         except Exception as e:
             print(f"Error al inicializar UI: {e}")
@@ -613,6 +615,22 @@ class MainWindow(QMainWindow):
             self.inventario_view.cargar_datos()
         elif indice == 5:
             self.finanzas_view.cargar_datos()
+
+    def _navegar_desde_dashboard(self, destino, parametro):
+        """Navega desde una card del dashboard a la vista correspondiente con filtro."""
+        if destino == "membresias":
+            self.cambiar_vista(1, self.btn_membresias)
+            self.membresias_view.cambiar_filtro(parametro)
+        elif destino == "finanzas":
+            self.cambiar_vista(5, self.btn_finanzas)
+            if parametro == "ingresos":
+                self.finanzas_view.tabs.setCurrentIndex(1)
+        elif destino == "inventario":
+            self.cambiar_vista(4, self.btn_inventario)
+            if parametro == "bajo_stock":
+                self.inventario_view.filtro_bajo_stock = True
+                self.inventario_view.btn_bajo_stock.setChecked(True)
+                self.inventario_view.cargar_datos()
 
     def _procesar_codigo_barras(self, codigo: str):
         """Procesa un código detectado por el escáner global."""

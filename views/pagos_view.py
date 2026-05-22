@@ -881,6 +881,7 @@ class PagosView(QWidget):
         self.tabla.setSortingEnabled(True)
         self.tabla.setAlternatingRowColors(False)
         aplicar_estilo_tabla_moderna(self.tabla)
+        self.tabla.cellDoubleClicked.connect(self._on_tabla_double_click)
         
         layout.addWidget(self.tabla)
         
@@ -919,6 +920,7 @@ class PagosView(QWidget):
             # Cliente - negro
             item_cliente = QTableWidgetItem(pago['cliente_nombre'])
             item_cliente.setForeground(QColor("#1a1a1a"))
+            item_cliente.setData(Qt.UserRole, pago['cliente_id'])
             self.tabla.setItem(i, 0, item_cliente)
             
             # Fecha - negro
@@ -987,6 +989,7 @@ class PagosView(QWidget):
             # Cliente - negro
             item_cliente = QTableWidgetItem(pago['cliente_nombre'])
             item_cliente.setForeground(QColor("#1a1a1a"))
+            item_cliente.setData(Qt.UserRole, pago['cliente_id'])
             self.tabla.setItem(i, 0, item_cliente)
             
             # Fecha - negro
@@ -1053,6 +1056,17 @@ class PagosView(QWidget):
         """Actualiza el total de pagos del mes"""
         total = pago_service.calcular_total_mes()
         self.label_total.setText(f"Total del mes: ${total:,.2f}")
+
+    def _on_tabla_double_click(self, row, col):
+        """Abre perfil del cliente al doble click en cualquier fila."""
+        item = self.tabla.item(row, 0)
+        if item:
+            cliente_id = item.data(Qt.UserRole)
+            if cliente_id:
+                from views.perfil_cliente_view import PerfilClienteDialog
+                dlg = PerfilClienteDialog(cliente_id, parent=self)
+                dlg.exec()
+                self.cargar_datos()
     
     def filtrar_por_fecha(self):
         """Filtra los pagos por el rango de fechas seleccionado"""
@@ -1089,6 +1103,7 @@ class PagosView(QWidget):
             self.tabla.setRowHeight(i, 52)
             item_cliente = QTableWidgetItem(pago['cliente_nombre'])
             item_cliente.setForeground(QColor("#1a1a1a"))
+            item_cliente.setData(Qt.UserRole, pago['cliente_id'])
             self.tabla.setItem(i, 0, item_cliente)
             
             item_fecha = QTableWidgetItem(pago['fecha'])
@@ -1172,37 +1187,19 @@ class PagosView(QWidget):
             
             # Mensaje con estilo y botón para ver factura
             msg = QMessageBox(self)
-            msg.setWindowTitle("Éxito")
-            msg.setText("Pago registrado correctamente")
-            msg.setInformativeText("¿Desea ver la factura generada?")
-            msg.setStyleSheet("""
-                QMessageBox {
-                    background-color: #f5f5f5;
-                }
-                QLabel {
-                    color: #2c2c2c;
-                    font-size: 13px;
-                    min-width: 300px;
-                }
-                QPushButton {
-                    background-color: #27ae60;
-                    color: white;
-                    padding: 8px 20px;
-                    border: none;
-                    border-radius: 4px;
-                    font-weight: bold;
-                    font-size: 13px;
-                    min-width: 80px;
-                }
-                QPushButton:hover {
-                    background-color: #229954;
-                }
-            """)
-            btn_ver = msg.addButton("Ver Factura", QMessageBox.ActionRole)
-            msg.addButton("Cerrar", QMessageBox.RejectRole)
-            msg.exec()
-            
-            if msg.clickedButton() == btn_ver:
+            msg.setWindowTitle("Pago Creado")
+            msg.setText(f"Pago creado correctamente.\nFactura #{pago_id} creada.\n\n¿Desea abrir la factura?")
+            msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+            msg.setDefaultButton(QMessageBox.Yes)
+            msg.setStyleSheet("QMessageBox { background-color: #ffffff; } QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }")
+            btn_si = msg.button(QMessageBox.Yes)
+            if btn_si:
+                btn_si.setText("Sí")
+                btn_si.setStyleSheet("QPushButton { background-color: #27ae60; color: white; padding: 8px 20px; border: none; border-radius: 4px; font-weight: bold; font-size: 13px; min-width: 80px; } QPushButton:hover { background-color: #229954; }")
+            btn_no = msg.button(QMessageBox.No)
+            if btn_no:
+                btn_no.setStyleSheet("QPushButton { background-color: #e74c3c; color: white; padding: 8px 20px; border: none; border-radius: 4px; font-weight: bold; font-size: 13px; min-width: 80px; } QPushButton:hover { background-color: #c0392b; }")
+            if msg.exec() == QMessageBox.Yes:
                 abrir_factura(ruta_factura)
     
     def editar_pago(self, pago):
@@ -1314,28 +1311,14 @@ class PagosView(QWidget):
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
         msg.setStyleSheet("""
-            QMessageBox {
-                background-color: #ffffff;
-            }
-            QLabel {
-                color: #2c2c2c;
-                font-size: 13px;
-                min-width: 300px;
-            }
-            QPushButton {
-                background-color: #2c3e50;
-                color: white;
-                padding: 8px 20px;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #3d5166;
-            }
+            QMessageBox { background-color: #ffffff; }
+            QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }
         """)
+        btn_si = msg.button(QMessageBox.Yes)
+        btn_si.setText("Sí")
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.button(QMessageBox.No)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         respuesta = msg.exec()
         
         if respuesta == QMessageBox.Yes:

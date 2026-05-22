@@ -391,6 +391,8 @@ class SimplePieChart(QWidget):
 
 class DashboardView(QWidget):
     """Vista principal del Dashboard"""
+    navegacion_solicitada = Signal(str, object)  # (destino, parametro)
+
     def __init__(self):
         super().__init__()
         # Estado de filtros
@@ -627,6 +629,20 @@ class DashboardView(QWidget):
         self.card_pagos_mes  = StatCard("Ingresos",    "$0", "#3498db", "fa5s.dollar-sign")
         self.card_stock_bajo = StatCard("Stock bajo",  "0",  "#e67e22", "fa5s.exclamation-triangle")
 
+        # Cards clickeables
+        self.card_activas.setCursor(Qt.PointingHandCursor)
+        self.card_por_vencer.setCursor(Qt.PointingHandCursor)
+        self.card_vencidas.setCursor(Qt.PointingHandCursor)
+        self.card_pagos_mes.setCursor(Qt.PointingHandCursor)
+        self.card_stock_bajo.setCursor(Qt.PointingHandCursor)
+
+        from utils.constants import ESTADO_ACTIVA, ESTADO_POR_VENCER, ESTADO_VENCIDA
+        self.card_activas.mousePressEvent    = lambda e: self.navegacion_solicitada.emit("membresias", ESTADO_ACTIVA)
+        self.card_por_vencer.mousePressEvent = lambda e: self.navegacion_solicitada.emit("membresias", ESTADO_POR_VENCER)
+        self.card_vencidas.mousePressEvent   = lambda e: self.navegacion_solicitada.emit("membresias", ESTADO_VENCIDA)
+        self.card_pagos_mes.mousePressEvent  = lambda e: self.navegacion_solicitada.emit("finanzas", "ingresos")
+        self.card_stock_bajo.mousePressEvent = lambda e: self.navegacion_solicitada.emit("inventario", "bajo_stock")
+
         
         metricas_layout.addWidget(self.card_activas)
         metricas_layout.addWidget(self.card_por_vencer)
@@ -774,6 +790,7 @@ class DashboardView(QWidget):
         self.tabla_membresias.verticalHeader().setVisible(False)
         self.tabla_membresias.setMinimumHeight(150)
         aplicar_estilo_tabla_moderna(self.tabla_membresias, compacta=True, embebida=True)
+        self.tabla_membresias.cellDoubleClicked.connect(self._on_membresias_double_click)
         layout_membresias.addWidget(self.tabla_membresias)
         
         tablas_layout.addWidget(frame_membresias, 3)
@@ -804,6 +821,7 @@ class DashboardView(QWidget):
         self.tabla_pagos.verticalHeader().setVisible(False)
         self.tabla_pagos.setMinimumHeight(150)
         aplicar_estilo_tabla_moderna(self.tabla_pagos, compacta=True, embebida=True)
+        self.tabla_pagos.cellDoubleClicked.connect(self._on_pagos_double_click)
         layout_pagos.addWidget(self.tabla_pagos)
         
         tablas_layout.addWidget(frame_pagos, 2)
@@ -818,6 +836,27 @@ class DashboardView(QWidget):
         # Evitar pasar caracteres Unicode no-ASCII a strftime (puede fallar en algunas locales)
         time_str = ahora.strftime("%d/%m/%Y  %H:%M:%S")
         self.label_reloj.setText("🕐 " + time_str)
+
+    def _abrir_perfil_cliente(self, cliente_id):
+        """Abre el diálogo de perfil del cliente."""
+        from views.perfil_cliente_view import PerfilClienteDialog
+        dlg = PerfilClienteDialog(cliente_id, parent=self.window())
+        dlg.exec()
+        self.cargar_datos()
+
+    def _on_membresias_double_click(self, row, col):
+        item = self.tabla_membresias.item(row, 0)
+        if item:
+            cliente_id = item.data(Qt.UserRole)
+            if cliente_id:
+                self._abrir_perfil_cliente(cliente_id)
+
+    def _on_pagos_double_click(self, row, col):
+        item = self.tabla_pagos.item(row, 0)
+        if item:
+            cliente_id = item.data(Qt.UserRole)
+            if cliente_id:
+                self._abrir_perfil_cliente(cliente_id)
 
     def sincronizar_google_drive(self):
         """Lanza la sincronización en un hilo separado"""
@@ -1010,6 +1049,7 @@ class DashboardView(QWidget):
             # Cliente - color oscuro
             cliente_item = QTableWidgetItem(membresia['cliente_nombre'])
             cliente_item.setForeground(QColor("#2c3e50"))
+            cliente_item.setData(Qt.UserRole, membresia['cliente_id'])
             self.tabla_membresias.setItem(i, 0, cliente_item)
             
             # Inicio - color oscuro
@@ -1055,6 +1095,7 @@ class DashboardView(QWidget):
             # Cliente - color oscuro
             cliente_item = QTableWidgetItem(pago['cliente_nombre'])
             cliente_item.setForeground(QColor("#2c3e50"))
+            cliente_item.setData(Qt.UserRole, pago['cliente_id'])
             self.tabla_pagos.setItem(i, 0, cliente_item)
             
             # Fecha - color oscuro

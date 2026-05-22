@@ -85,7 +85,7 @@ def obtener_producto(producto_id):
     return dict(producto) if producto else None
 
 
-def listar_productos(buscar="", categoria=None):
+def listar_productos(buscar="", categoria=None, bajo_stock=False):
     """Lista productos con búsqueda opcional y filtro por categoría."""
     conn = get_connection()
     cursor = conn.cursor()
@@ -100,6 +100,9 @@ def listar_productos(buscar="", categoria=None):
     if categoria:
         query += " AND categoria = ?"
         params.append(categoria)
+
+    if bajo_stock:
+        query += " AND cantidad <= stock_minimo"
 
     query += " ORDER BY nombre ASC"
     cursor.execute(query, params)

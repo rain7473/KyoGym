@@ -110,16 +110,11 @@ class VerUsuariosDialog(QDialog):
         msg.setStyleSheet("""
             QMessageBox { background-color: #f5f5f5; }
             QLabel { color: #2c2c2c; font-size: 14px; min-width: 280px; border: none; }
-            QPushButton {
-                background-color: #2c3e50; color: white;
-                padding: 8px 20px; border: none;
-                border-radius: 4px; font-weight: bold;
-                font-size: 13px; min-width: 70px;
-            }
-            QPushButton:hover { background-color: #3d5166; }
         """)
         btn_si = msg.addButton("Sí", QMessageBox.YesRole)
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:70px;")
         btn_no = msg.addButton("No", QMessageBox.NoRole)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:70px;")
         msg.setDefaultButton(btn_no)
         msg.exec()
         if msg.clickedButton() != btn_si:
@@ -1164,28 +1159,14 @@ class ConfiguracionView(QWidget):
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
         msg.setStyleSheet("""
-            QMessageBox {
-                background-color: #ffffff;
-            }
-            QLabel {
-                color: #2c2c2c;
-                font-size: 13px;
-                min-width: 300px;
-            }
-            QPushButton {
-                background-color: #2c3e50;
-                color: white;
-                padding: 8px 20px;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #3d5166;
-            }
+            QMessageBox { background-color: #ffffff; }
+            QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }
         """)
+        btn_si = msg.button(QMessageBox.Yes)
+        btn_si.setText("Sí")
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.button(QMessageBox.No)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         respuesta = msg.exec()
         
         if respuesta == QMessageBox.Yes:
@@ -1384,28 +1365,14 @@ class ConfiguracionView(QWidget):
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
         msg.setStyleSheet("""
-            QMessageBox {
-                background-color: #ffffff;
-            }
-            QLabel {
-                color: #2c2c2c;
-                font-size: 13px;
-                min-width: 300px;
-            }
-            QPushButton {
-                background-color: #2c3e50;
-                color: white;
-                padding: 8px 20px;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #3d5166;
-            }
+            QMessageBox { background-color: #ffffff; }
+            QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }
         """)
+        btn_si = msg.button(QMessageBox.Yes)
+        btn_si.setText("Sí")
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.button(QMessageBox.No)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         respuesta = msg.exec()
         
         if respuesta == QMessageBox.Yes:
@@ -2249,15 +2216,11 @@ class ConfiguracionView(QWidget):
         msg.setStyleSheet("""
             QMessageBox { background-color: #f5f5f5; }
             QLabel { color: #2c2c2c; font-size: 13px; min-width: 320px; }
-            QPushButton {
-                background-color: #2c3e50; color: white;
-                padding: 8px 20px; border: none; border-radius: 4px;
-                font-weight: bold; font-size: 13px; min-width: 80px;
-            }
-            QPushButton:hover { background-color: #3d5166; }
         """)
         btn_si = msg.addButton("Sí, eliminar", QMessageBox.YesRole)
-        msg.addButton("Cancelar", QMessageBox.NoRole)
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_cancel = msg.addButton("Cancelar", QMessageBox.NoRole)
+        btn_cancel.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         msg.exec()
         if msg.clickedButton() != btn_si:
             return
@@ -2688,20 +2651,11 @@ class ConfiguracionView(QWidget):
         msg.setStyleSheet("""
             QMessageBox { background-color: #f5f5f5; }
             QLabel { color: #2c2c2c; font-size: 14px; min-width: 280px; border: none; }
-            QPushButton {
-                background-color: #2c3e50;
-                color: white;
-                padding: 8px 20px;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                min-width: 80px;
-            }
-            QPushButton:hover { background-color: #3d5166; }
         """)
         btn_si = msg.addButton("Sí", QMessageBox.YesRole)
-        msg.addButton("No", QMessageBox.NoRole)
+        btn_si.setStyleSheet("background:#e67e22; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.addButton("No", QMessageBox.NoRole)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         msg.exec()
         if msg.clickedButton() != btn_si:
             return

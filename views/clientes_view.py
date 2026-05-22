@@ -515,6 +515,7 @@ class ClientesView(QWidget):
         self.tabla.setAlternatingRowColors(False)
         self.tabla.setItemDelegate(BirthdayRowDelegate(self.tabla))
         self.tabla.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabla.cellDoubleClicked.connect(self._on_tabla_double_click)
         layout.addWidget(self.tabla)
 
         return w
@@ -811,6 +812,7 @@ class ClientesView(QWidget):
         self.tabla_frecuentes.setAlternatingRowColors(False)
         self.tabla_frecuentes.verticalHeader().setVisible(False)
         aplicar_estilo_tabla_moderna(self.tabla_frecuentes)
+        self.tabla_frecuentes.cellDoubleClicked.connect(self._on_frecuentes_double_click)
         layout.addWidget(self.tabla_frecuentes)
 
         return w
@@ -865,6 +867,7 @@ class ClientesView(QWidget):
         self.tabla_inactivos.setAlternatingRowColors(False)
         self.tabla_inactivos.verticalHeader().setVisible(False)
         aplicar_estilo_tabla_moderna(self.tabla_inactivos)
+        self.tabla_inactivos.cellDoubleClicked.connect(self._on_inactivos_double_click)
         layout.addWidget(self.tabla_inactivos)
 
         return w
@@ -961,6 +964,8 @@ class ClientesView(QWidget):
                 for col, val in enumerate(vals):
                     item = QTableWidgetItem(val)
                     item.setForeground(QColor("#2c6fad" if col == 3 else "#1a1a1a"))
+                    if col == 1:
+                        item.setData(Qt.UserRole, c["id"])
                     self.tabla_frecuentes.setItem(i, col, item)
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
@@ -986,6 +991,8 @@ class ClientesView(QWidget):
                 for col, val in enumerate(vals):
                     item = QTableWidgetItem(val)
                     item.setForeground(QColor("#e74c3c" if col == 3 else "#1a1a1a"))
+                    if col == 0:
+                        item.setData(Qt.UserRole, c["id"])
                     self.tabla_inactivos.setItem(i, col, item)
         except Exception as e:
             QMessageBox.critical(self, "Error", str(e))
@@ -1037,6 +1044,7 @@ class ClientesView(QWidget):
             # Nombre (con emoji si es cumpleaños)
             nombre_display = f"🎂 {cliente['nombre']}" if es_cumpleanos else cliente['nombre']
             item_nombre = QTableWidgetItem(nombre_display)
+            item_nombre.setData(Qt.UserRole, cliente['id'])
             self.tabla.setItem(i, 0, item_nombre)
 
             # Teléfono
@@ -1102,6 +1110,30 @@ class ClientesView(QWidget):
         dlg = PerfilClienteDialog(cliente_id, parent=self)
         dlg.exec()
         self.cargar_datos()
+
+    def _on_tabla_double_click(self, row, col):
+        """Abre perfil del cliente al doble click en cualquier celda de la fila."""
+        item = self.tabla.item(row, 0)
+        if item:
+            cliente_id = item.data(Qt.UserRole)
+            if cliente_id:
+                self.ver_perfil_cliente(cliente_id)
+
+    def _on_frecuentes_double_click(self, row, col):
+        """Abre perfil desde la tabla de clientes frecuentes (cliente en col 1)."""
+        item = self.tabla_frecuentes.item(row, 1)
+        if item:
+            cliente_id = item.data(Qt.UserRole)
+            if cliente_id:
+                self.ver_perfil_cliente(cliente_id)
+
+    def _on_inactivos_double_click(self, row, col):
+        """Abre perfil desde la tabla de clientes inactivos (cliente en col 0)."""
+        item = self.tabla_inactivos.item(row, 0)
+        if item:
+            cliente_id = item.data(Qt.UserRole)
+            if cliente_id:
+                self.ver_perfil_cliente(cliente_id)
 
     def agregar_cliente(self):
         """Muestra diálogo para agregar cliente"""
@@ -1320,28 +1352,14 @@ class ClientesView(QWidget):
         msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
         msg.setDefaultButton(QMessageBox.No)
         msg.setStyleSheet("""
-            QMessageBox {
-                background-color: #ffffff;
-            }
-            QLabel {
-                color: #2c2c2c;
-                font-size: 13px;
-                min-width: 300px;
-            }
-            QPushButton {
-                background-color: #2c3e50;
-                color: white;
-                padding: 8px 20px;
-                border: none;
-                border-radius: 4px;
-                font-weight: bold;
-                font-size: 13px;
-                min-width: 80px;
-            }
-            QPushButton:hover {
-                background-color: #3d5166;
-            }
+            QMessageBox { background-color: #ffffff; }
+            QLabel { color: #2c2c2c; font-size: 13px; min-width: 300px; }
         """)
+        btn_si = msg.button(QMessageBox.Yes)
+        btn_si.setText("Sí")
+        btn_si.setStyleSheet("background:#e74c3c; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
+        btn_no = msg.button(QMessageBox.No)
+        btn_no.setStyleSheet("background:#7f8c8d; color:white; padding:8px 20px; border:none; border-radius:4px; font-weight:bold; font-size:13px; min-width:80px;")
         respuesta = msg.exec()
         
         if respuesta == QMessageBox.Yes:
